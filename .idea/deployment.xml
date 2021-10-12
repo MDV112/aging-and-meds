@@ -1,11 +1,60 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <project version="4">
-  <component name="PublishConfigData" remoteFilesAllowedToDisappearOnAutoupload="false">
+  <component name="PublishConfigData" autoUpload="Always" serverName="smorandv@132.68.39.93:22" remoteFilesAllowedToDisappearOnAutoupload="false">
     <serverData>
+      <paths name="smorandv@132.68.39.93:22">
+        <serverdata>
+          <mappings>
+            <mapping deploy="/home/smorandv/ac8_and_aging" local="$PROJECT_DIR$" />
+          </mappings>
+        </serverdata>
+      </paths>
       <paths name="smorandv@triton01:22">
         <serverdata>
           <mappings>
             <mapping local="$PROJECT_DIR$" web="/" />
+          </mappings>
+        </serverdata>
+      </paths>
+      <paths name="smorandv@triton01:22 (1)">
+        <serverdata>
+          <mappings>
+            <mapping local="$PROJECT_DIR$" web="/" />
+          </mappings>
+        </serverdata>
+      </paths>
+      <paths name="smorandv@triton01:22 (2)">
+        <serverdata>
+          <mappings>
+            <mapping local="$PROJECT_DIR$" web="/" />
+          </mappings>
+        </serverdata>
+      </paths>
+      <paths name="smorandv@triton01:22 (3)">
+        <serverdata>
+          <mappings>
+            <mapping local="$PROJECT_DIR$" web="/" />
+          </mappings>
+        </serverdata>
+      </paths>
+      <paths name="smorandv@triton01:22 password">
+        <serverdata>
+          <mappings>
+            <mapping deploy="/home/smorandv/aging_and_meds" local="$PROJECT_DIR$" web="/" />
+          </mappings>
+        </serverdata>
+      </paths>
+      <paths name="smorandv@triton01:22 password (1)">
+        <serverdata>
+          <mappings>
+            <mapping deploy="/home/smorandv/aging_and_meds" local="$PROJECT_DIR$" web="/" />
+          </mappings>
+        </serverdata>
+      </paths>
+      <paths name="smorandv@triton01:22 password (2)">
+        <serverdata>
+          <mappings>
+            <mapping deploy="/home/smorandv/aging_and_meds" local="$PROJECT_DIR$" />
           </mappings>
         </serverdata>
       </paths>
@@ -38,5 +87,6 @@
         </serverdata>
       </paths>
     </serverData>
+    <option name="myAutoUpload" value="ALWAYS" />
   </component>
 </project>

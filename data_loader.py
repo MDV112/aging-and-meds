@@ -4,9 +4,13 @@ import h5py
 import scipy.io as sio
 from pathlib import Path
 import os
+from torch.utils.data import Dataset
+import torch.nn as nn
+import torch
 from sklearn.preprocessing import StandardScaler
 from sklearn.preprocessing import MinMaxScaler
 from sklearn.impute import SimpleImputer
+import random
 
 
 class Dataloader:
@@ -25,6 +29,10 @@ class Dataloader:
         self.x_test = None
         self.Y_train = None
         self.y_test = None
+        self.x_train_specific = None
+        self.y_train_specific = None
+        self.x_test_specific = None
+        self.y_test_specific = None
 
     def load(self):
         """
@@ -58,14 +66,14 @@ class Dataloader:
                     feat_names = [feat_names_obj[0][i][0] for i in range(feat_names_obj.size)]
                     self.feat_names = feat_names
                 else:
-                    Exception('Adequate mat file for features names was not found in ' + str(Path(self.data_path)))
+                    raise Exception('Adequate mat file for features names was not found in ' + str(Path(self.data_path)))
             self.ds_input = pd.DataFrame(ds_input.T, columns=feat_names)
             self.ds_output = pd.DataFrame(ds_output.T, columns=['id', 'age', 'med', 'win_num'])
             self.loaded = True
             return self.ds_input, self.ds_output, self.feat_names
         else:
             if type(self.dataset_name) != int:
-                Exception('dataset_name has to be an integer representing number of beats')
+                raise Exception('dataset_name has to be an integer representing number of beats')
             fname = Path.joinpath(Path(self.data_path), 'rr.h5')
             f = h5py.File(fname, "r")
             ds_keys = []
@@ -81,6 +89,7 @@ class Dataloader:
         """
         This function splits the data into training and testing so the mice are different in both groups
         :param test_size: test size
+        :param seed: for repeatability of same mice
         :return:
         X_train: HRV features or RR for training
         Y_train: Labels for training
@@ -106,9 +115,9 @@ class Dataloader:
             self.splitted = True
             return self.X_train, self.x_test, self.Y_train, self.y_test, self.feat_names
         else:
-            Exception('Data have to be loaded first!')
+            raise Exception('Data have to be loaded first!')
 
-    def clean(self, thresh=[0.05, 0.15], feat2drop=['RR','NN'], **kwargs):
+    def clean(self, thresh=[0.05, 0.15], feat2drop=['RR', 'NN'], **kwargs):
         """
         This function removes selected features and nan values in one of three methods depending on the fraction of nans.
         If fraction of nans is lower then first threshold argument then an imputation is performed according
@@ -116,6 +125,7 @@ class Dataloader:
         thresholds then random sampling is made. Again both according to training data. If it is higher then the feature
         is dropped in both training and testing.
         :param thresh: 2 element list. Values are in an ascending order and can range between 0 and 1
+        :param feat2drop: features to drop without relating its nan values or anything else
         :param kwargs: used for SimpleImputer, e.g. changing strategy to median instead of default mean
         :return: training and testing set without nans.
         """
@@ -178,11 +188,180 @@ class Dataloader:
                     print('The features {} were dropped. Features left are {}'.format(total_drop, self.feat_names))
 
         else:
-            Exception('Data have to be splitted first!')
+            raise Exception('Data have to be splitted first!')
 
+    def choose_specific_xy(self, label_dict={'k_id': 'all', 'med': 'all', 'age': 'all', 'win_num': 'all', 'seed': 42}):
+        """
+        This function should output specific training and testing sets according to user requests upon number of mice,
+        type of medicine and age.
+        :param label_dict: k_id should be an index (up to the number of mice in X_train) to choose random mice from
+        X_train. med should be a list of medications (represented as integers). age should be a list of  ages.
+        Both med and age have to be list even if they consist only one element.
+        :param seed: seed for repeatability of random choice of mice
+        :return: training and testing sets.
+        """
+
+        random.seed(label_dict['seed'])
+        id = list(set(self.Y_train['id']))
+        if self.input_type == 'features':
+            if label_dict['k_id'] == 'all':
+                self.x_train_specific = self.X_train
+                self.y_train_specific = self.Y_train
+            else:
+                id = random.choices(id, k=label_dict['k_id'])
+                self.x_train_specific = self.X_train.loc[[x in id for x in self.Y_train['id']], :]
+                self.y_train_specific = self.Y_train[[x in id for x in self.Y_train['id']]]
+
+            self.x_test_specific = self.x_test
+            self.y_test_specific = self.y_test
+
+            if label_dict['med'] == 'all':
+                pass
+            else:
+                self.x_train_specific = self.x_train_specific.loc[[x in label_dict['med'] for x in self.y_train_specific['med']], :]
+                self.y_train_specific = self.y_train_specific[[x in label_dict['med'] for x in self.y_train_specific['med']]]
+                self.x_test_specific = self.x_test_specific.loc[[x in label_dict['med'] for x in self.y_test_specific['med']], :]
+                self.y_test_specific = self.y_test_specific[[x in label_dict['med'] for x in self.y_test_specific['med']]]
+
+            if label_dict['age'] == 'all':
+                pass
+            else:
+                self.x_train_specific = self.x_train_specific.loc[[x in label_dict['age'] for x in self.y_train_specific['age']], :]
+                self.y_train_specific = self.y_train_specific[[x in label_dict['age'] for x in self.y_train_specific['age']]]
+                self.x_test_specific = self.x_test_specific.loc[[x in label_dict['age'] for x in self.y_test_specific['age']], :]
+                self.y_test_specific = self.y_test_specific[[x in label_dict['age'] for x in self.y_test_specific['age']]]
+
+            if label_dict['win_num'] == 'all':
+                pass
+            else:
+                if isinstance(label_dict['win_num'], int):
+                    self.x_train_specific = self.x_train_specific.loc[[x in np.arange(1, label_dict['win_num'] + 1) for x in self.y_train_specific['win_num']], :]
+                    self.y_train_specific = self.y_train_specific[[x in np.arange(1, label_dict['win_num'] + 1) for x in self.y_train_specific['win_num']]]
+                    self.x_test_specific = self.x_test_specific.loc[[x in np.arange(1, label_dict['win_num'] + 1) for x in self.y_test_specific['win_num']], :]
+                    self.y_test_specific = self.y_test_specific[[x in np.arange(1, label_dict['win_num'] + 1) for x in self.y_test_specific['win_num']]]
+                else:
+                    self.x_train_specific = self.x_train_specific.loc[[x in label_dict['win_num'] for x in self.y_train_specific['win_num']], :]
+                    self.y_train_specific = self.y_train_specific[[x in label_dict['win_num'] for x in self.y_train_specific['win_num']]]
+                    self.x_test_specific = self.x_test_specific.loc[[x in label_dict['win_num'] for x in self.y_test_specific['win_num']], :]
+                    self.y_test_specific = self.y_test_specific[[x in label_dict['win_num'] for x in self.y_test_specific['win_num']]]
+
+
+            # x_val_specific = self.X_train.loc[[x in win_num for x in self.Y_train['win_num']], :]
+            # y_val_specific = self.Y_train[[x in win_num for x in self.Y_train['win_num']]]
+            # x_train_specific = self.X_train.loc[[x not in win_num for x in self.Y_train['win_num']], :]
+            # y_train_specific = self.Y_train[[x not in win_num for x in self.Y_train['win_num']]]
+            #
+            # x_train_specific = x_train_specific.values
+            # x_val_specific = x_val_specific.values
+
+        else:  # i.e. if it is a raw signal
+            if label_dict['k_id'] == 'all':
+                self.x_train_specific = self.X_train
+                self.y_train_specific = self.Y_train
+            else:
+                id = random.choices(id, k=label_dict['k_id'])
+                self.x_train_specific = self.X_train[:, [x in id for x in self.Y_train['id']]]
+                self.y_train_specific = self.Y_train[[x in id for x in self.Y_train['id']]]
+
+            self.x_test_specific = self.x_test
+            self.y_test_specific = self.y_test
+
+            if label_dict['med'] == 'all':
+                pass
+            else:
+                self.x_train_specific = self.x_train_specific[:, [x in label_dict['med'] for x in self.y_train_specific['med']]]
+                self.y_train_specific = self.y_train_specific[[x in label_dict['med'] for x in self.y_train_specific['med']]]
+                self.x_test_specific = self.x_test_specific[:, [x in label_dict['med'] for x in self.y_test_specific['med']]]
+                self.y_test_specific = self.y_test_specific[[x in label_dict['med'] for x in self.y_test_specific['med']]]
+            if label_dict['age'] == 'all':
+                pass
+            else:
+                self.x_train_specific = self.x_train_specific[:, [x in label_dict['age'] for x in self.y_train_specific['age']]]
+                self.y_train_specific = self.y_train_specific[[x in label_dict['age'] for x in self.y_train_specific['age']]]
+                self.x_test_specific = self.x_test_specific[:, [x in label_dict['age'] for x in self.y_test_specific['age']]]
+                self.y_test_specific = self.y_test_specific[[x in label_dict['age'] for x in self.y_test_specific['age']]]
+
+            if label_dict['win_num'] == 'all':
+                pass
+            else:
+                if isinstance(label_dict['win_num'], int):
+                    self.x_train_specific = self.x_train_specific[:, [x in np.arange(1, label_dict['win_num'] + 1) for x in self.y_train_specific['win_num']]]
+                    self.y_train_specific = self.y_train_specific[[x in np.arange(1, label_dict['win_num'] + 1) for x in self.y_train_specific['win_num']]]
+                    self.x_test_specific = self.x_test_specific[:, [x in np.arange(1, label_dict['win_num'] + 1) for x in self.y_test_specific['win_num']]]
+                    self.y_test_specific = self.y_test_specific[[x in np.arange(1, label_dict['win_num'] + 1) for x in self.y_test_specific['win_num']]]
+                else:
+                    self.x_train_specific = self.x_train_specific[:, [x in label_dict['win_num'] for x in self.y_train_specific['win_num']]]
+                    self.y_train_specific = self.y_train_specific[[x in label_dict['win_num'] for x in self.y_train_specific['win_num']]]
+                    self.x_test_specific = self.x_test_specific[:, [x in label_dict['win_num'] for x in self.y_test_specific['win_num']]]
+                    self.y_test_specific = self.y_test_specific[[x in label_dict['win_num'] for x in self.y_test_specific['win_num']]]
+        # return self.x_train_specific, self.y_train_specific, self.x_test_specific, self.y_test_specific
+    ###################################################
+        # id = list(set(self.Y_train['id']))
+        # id_ovrfit = id[0:]
+        # self.x4overfit = self.X_train[:, [x in id_ovrfit for x in self.Y_train['id']]]
+        # self.y4overfit = self.Y_train[[x in id_ovrfit for x in self.Y_train['id']]]
+        # self.x4overfit = self.x4overfit[:, [x==True for x in self.y4overfit['med']==0]]
+        # self.y4overfit = self.y4overfit[[x==True for x in self.y4overfit['med']==0]]
+        # self.x4overfit = self.x4overfit[:, [x==True for x in self.y4overfit['age']==6]]
+        # self.y4overfit = self.y4overfit[[x==True for x in self.y4overfit['age']==6]]
+        # return self.x4overfit, self.y4overfit
+    #######################################################
+
+
+class TorchDataset(Dataset):
+    def __init__(self, data, label='id', mode='train'):
+        self.data = data
+        self.hash_id = None
+        if mode == 'train':
+            if label == 'id':
+                self.hash_id = {tag: idx for idx, tag in enumerate(set(data.y_train_specific[label]))}
+            self.y = torch.tensor(data.y_train_specific[label].values, dtype=torch.int64)
+            self.X = torch.tensor(data.x_train_specific, dtype=torch.float, requires_grad=True)
+        if mode == 'test':
+            if label == 'id':
+                self.hash_id = {tag: idx for idx, tag in enumerate(set(data.y_test_specific['id']))}
+            self.y = torch.tensor(data.y_test_specific[label].values, dtype=torch.int64)
+            self.X = torch.tensor(data.x_test_specific, dtype=torch.float, requires_grad=True)
+        if mode == 'train_val':
+            X, y = data
+            if label == 'id':
+                self.hash_id = {tag: idx for idx, tag in enumerate(set(y.detach().numpy()))}
+            self.X = torch.transpose(X, 0, 1)
+            self.y = y
+        if mode == 'test_val':
+            X, y = data
+            if label == 'id':
+                self.hash_id = {tag: idx for idx, tag in enumerate(set(y.detach().numpy()))}
+            self.X = torch.transpose(X, 0, 1)
+            self.y = y
+        # if ds_name == 'ovrfit':
+        #     self.hash_id = {tag : idx for idx, tag in enumerate(set(data.y4overfit['id']))}
+        #     self.y = torch.tensor(data.y4overfit['id'].values, dtype=torch.int64)
+        #     self.X = torch.tensor(data.x4overfit, dtype=torch.float, requires_grad=True)
+        # else:
+        #     self.hash_id = {tag : idx for idx, tag in enumerate(set(data.Y_train['id']))}
+        #     self.y = torch.tensor(data.Y_train['id'].values, dtype=torch.int64)
+        #     self.X = torch.tensor(data.X_train, dtype=torch.float, requires_grad=True)
+
+    def __len__(self):
+        return self.X.shape[1]
+
+    def __getitem__(self, idx):
+        if torch.is_tensor(idx):
+            idx = idx.tolist()
+        X = torch.transpose(self.X, 0, 1)
+        # X = torch.unsqueeze(X, 1)
+        x = X[idx:idx+1, :]
+        tag = self.y[idx]
+        if self.hash_id is not None:
+            y = torch.tensor(self.hash_id[tag.item()], dtype=torch.int64)  # convert labels ranging fro 0 to C-1
+        else:
+            y = torch.tensor(tag, dtype=torch.int64)
+        sample = (x, y)
+        return sample
     # def scale(self, method='standard'):
     #     """
-    #     This funcion scales the data. Notice that we probably shouldn't use it here because in the training part we
+    #     This function scales the data. Notice that we probably shouldn't use it here because in the training part we
     #     scale training and validation apart.
     #     :param method: Either standard or minmax
     #     :return: Scaled features or RR

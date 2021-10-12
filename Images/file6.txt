@@ -1,0 +1,1 @@
+[["AVNN", "SDNN", "pNN5", "SEM", "BETA_AR", "HF_NORM_AR", "LF_NORM_AR", "LF_TO_HF_AR", "VLF_NORM_AR", "SD1", "SD2", "alpha1", "alpha2", "SampEn", "PIP", "IALS", "PSS", "PAS"], {"k_id": 20, "med": [1], "age": [6], "win_num": "all", "seed": 1}]

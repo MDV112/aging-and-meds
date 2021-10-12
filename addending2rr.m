@@ -6,7 +6,7 @@ function [] = addending2rr()
 close all
 clear
 clc
-%%
+%% aging
 old_dir = pwd;
 h = 1;
 for age = 6:3:30
@@ -43,4 +43,9 @@ for age = 6:3:30
         end
     end
 end
+%% AC8
+idx_A = strfind(curr_name,'AC8');
+idx_ = strfind(curr_name,'_');
+f = find(idx_>idx_A,1,'first');
+curr_tag = curr_name(idx_A+3:idx_(f)-1);
 end
