@@ -12,32 +12,36 @@ from run import Run
 from sklearn.model_selection import train_test_split
 
 
+def anc_pos_neg(i, out1, out2, lbl1, lbl2):
+    anchor = out1[i, :]
+    flag = 1
+    pos = 1
+    p_idx = torch.where(lbl2 == lbl1[i])[0]
+    if p_idx.shape[0] > 1:
+        p_idx = p_idx[0].item()
+    elif p_idx.shape[0] == 0:
+        flag = 0
+        pos = 0
+    else:
+        p_idx = p_idx.item()
+    n_idx = torch.where(lbl2 != lbl1[i])[0]
+    if n_idx.shape[0] > 1:
+        n_idx = n_idx[torch.randint(n_idx.shape[0], (1,)).item()].item()
+    else:
+        n_idx = n_idx.item()
+    if flag != 0:
+        pos = out2[p_idx, :]
+    neg = out2[n_idx, :]
+    return anchor, pos, neg
+
+
 def id_triplet_loss(out1, out2, lbl1, lbl2, lmbda=0.5):
     cos = nn.CosineSimilarity()
     soft = nn.Softmax()
     eps = 0.0000005
     l = 0
     for i in range(out1.shape[0]):
-        anchor = out1[i, :]
-        flag = 1
-        pos = 1
-        p_idx = torch.where(lbl2 == lbl1[i])[0]
-        if p_idx.shape[0] > 1:
-            p_idx = p_idx[0].item()
-        elif p_idx.shape[0] == 0:
-            flag = 0
-            pos = 0
-        else:
-            p_idx = p_idx.item()
-        n_idx = torch.where(lbl2 != lbl1[i])[0]
-        if n_idx.shape[0] > 1:
-            n_idx = n_idx[torch.randint(n_idx.shape[0], (1,)).item()].item()
-        else:
-            n_idx = n_idx.item()
-        if flag != 0:
-            pos = out2[p_idx, :]
-        neg = out2[n_idx, :]
-
+        anchor, pos, neg = anc_pos_neg(i, out1, out2, lbl1, lbl2)
         cov_anc = cov(anchor, anchor, rowvar=True)
         cov_anc_neg = cov(anchor, neg, rowvar=True)
         cov_neg = cov(neg, neg, rowvar=True)
@@ -48,10 +52,13 @@ def id_triplet_loss(out1, out2, lbl1, lbl2, lmbda=0.5):
         Lce = soft(anchor).matmul(soft(neg))  # .mean(-torch.sum(anchor * torch.log(neg), 1))
         if Lce.isnan():
             Lce = 0
-        L_cosine = 1 - cos(anchor.unsqueeze(dim=0), pos.unsqueeze(dim=0))
-        if L_cosine.isnan():
+        if type(pos) == int:
             L_cosine = 0
-        l += flag*L_cosine + lmbda*Lce + (1 - lmbda)*I
+        else:
+            L_cosine = 1 - cos(anchor.unsqueeze(dim=0), pos.unsqueeze(dim=0))
+            if L_cosine.isnan():
+                L_cosine = 0
+        l += L_cosine + lmbda*Lce + (1 - lmbda)*I
     loss = l/out1.shape[0]
     return loss
 
@@ -192,7 +199,7 @@ class ContrastiveLoss(torch.nn.Module):
     Based on:
     """
 
-    def __init__(self, margin=1.0, mode='normal'):
+    def __init__(self, margin=2.0, mode='normal'):
         super(ContrastiveLoss, self).__init__()
         self.margin = margin
         self.mode = mode
@@ -251,7 +258,7 @@ class ContrastiveLoss(torch.nn.Module):
                     # h += 1
                     # d_ij = -torch.log(nom / (den - nom))
                     # l_ij += y*d_ij + (1-y)*torch.clamp(self.margin - d_ij, min=0.0)
-                l_ij += torch.clamp(self.margin + flag_none*temp[p_idx] - temp[n_idx], min=0.0)
+                l_ij += torch.clamp(self.margin - (flag_none*temp[p_idx] - temp[n_idx]), min=0.0)
             loss = l_ij / out1.shape[0]
             # res = cos(out1, out2)
             # dist_sq = res.t()

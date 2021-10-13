@@ -20,7 +20,7 @@ if __name__ == '__main__':
     red_dim = False  # apply dimensionality reduction
     vis = True
     device = torch.device("cuda:3" if torch.cuda.is_available() else "cpu")
-    data = Dataloader() # input_type='raw', dataset_name=250)
+    data = Dataloader(input_type='raw', dataset_name=250)
     data.load()
     data.split()
     drop_indices = [0, 1, 4, 9, 10, 12, 13, 15, 17]
@@ -69,7 +69,7 @@ if __name__ == '__main__':
         # for param in mod.model.parameters():
         #     print(param.data)
         # loss_train, loss_val, acc_train, acc_val = mod.train('constructive_cosine', epochs=300)
-        mod.train('id_triplet_loss', epochs=300)
+        mod.train('constructive_cosine', epochs=300)
         # loss_train, loss_val, acc_train, acc_val = mod.train(nn.BCEWithLogitsLoss(), epochs=1000)
         # for param in mod.model.parameters():
         #     print(param.data)
