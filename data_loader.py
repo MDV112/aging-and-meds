@@ -70,6 +70,10 @@ class Dataloader:
             self.ds_input = pd.DataFrame(ds_input.T, columns=feat_names)
             self.ds_output = pd.DataFrame(ds_output.T, columns=['id', 'age', 'med', 'win_num'])
             self.loaded = True
+            lbls_drop = self.ds_input[(self.ds_output['id'] == 726) & (self.ds_output['age'] == 27)].index
+            self.ds_input.drop(labels=lbls_drop, inplace=True)
+            self.ds_output.drop(labels=lbls_drop, inplace=True)
+            # self.ds_output[(self.ds_output['id'] == 726) & (self.ds_output['age'] == 27)].drop(inpalce=True)
             return self.ds_input, self.ds_output, self.feat_names
         else:
             if type(self.dataset_name) != int:
@@ -83,6 +87,9 @@ class Dataloader:
             ds_output = f[matching[1]].value.astype(int)
             self.ds_output = pd.DataFrame(ds_output.T, columns=['id', 'age', 'med', 'win_num'])
             self.loaded = True
+            lbls_drop = self.ds_input[(self.ds_output['id'] == 726) & (self.ds_output['age'] == 27)].index
+            self.ds_input.drop(labels=lbls_drop, inplace=True)
+            self.ds_output.drop(labels=lbls_drop, inplace=True)
             return self.ds_input, self.ds_output
 
     def split(self, seed=42, test_size=0.2):

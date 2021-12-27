@@ -10,6 +10,7 @@ import time
 from sklearn.metrics import classification_report
 from run import Run
 from sklearn.model_selection import train_test_split
+from extra_functions import BuildCNN
 
 
 def anc_pos_neg(i, out1, out2, lbl1, lbl2):
@@ -233,6 +234,7 @@ class ContrastiveLoss(torch.nn.Module):
             cos = nn.CosineSimilarity()
             h = 0
             l_ij = 0
+            none_count = 0
             for i in range(out1.shape[0]):
                 anchor = out1[i, :]
                 temp = cos(anchor.tile((out1.shape[0], 1)), out2)
@@ -243,6 +245,7 @@ class ContrastiveLoss(torch.nn.Module):
                     p_idx = p_idx[0].item()
                 elif p_idx.shape[0] == 0:
                     flag_none = 0
+                    none_count += 1
                     p_idx = 0
                 else:
                     p_idx = p_idx.item()
@@ -309,11 +312,11 @@ class DeepModels():
             self.chosen_model = AE()
         if model_name == 'CNN':
             if label == 'id':
-                self.chosen_model = CNN(len(self.ds_train.hash_id), self.data_loader.dataset_name, **kwargs)
+                self.chosen_model = BuildCNN(self.data_loader.dataset_name, num_labels=len(self.ds_train.hash_id), **kwargs)
             else:
-                self.chosen_model = CNN(len(np.unique(self.ds_train.y)), self.data_loader.dataset_name, **kwargs)
-        if model_name == 'TruncatedCNN':
-            self.chosen_model = TruncatedCNN(list(self.model.children()), **kwargs)
+                self.chosen_model = BuildCNN(self.data_loader.dataset_name, num_labels=len(np.unique(self.ds_train.y)), **kwargs)
+        if model_name == 'TruncCNNtest':
+            self.chosen_model = TruncCNNtest(list(self.model.children()), **kwargs)
         if model_name == 'AdverserailCNN':
             self.chosen_model = AdverserailCNN(self.data_loader.dataset_name, **kwargs)
         if model_name == 'Advrtset':
@@ -338,8 +341,8 @@ class DeepModels():
             self.optimizer = optimizer(self.model.parameters(), lr=lr, **kwargs)
             self.optimizer2 = optimizer(self.model.parameters(), lr=lr, **kwargs)
 
-    def train(self, loss_func, epochs=20):
-        if type(self.chosen_model).__name__ in ['TruncatedCNN', 'AdverserailCNN', 'Advrtset', 'TruncCNNtest']:
+    def train(self, loss_func, epochs=20, n_nets=1):
+        if (type(self.chosen_model).__name__ in ['TruncatedCNN', 'AdverserailCNN', 'Advrtset', 'TruncCNNtest']) | (n_nets==2):
             self.model2 = self.model
             self.optimizer2 = self.optimizer
             self.n_nets = 2
@@ -368,7 +371,7 @@ class DeepModels():
                     # forward + backward + optimize
                     outputs = self.model(inputs)  # forward pass
                     # outputs = torch.tensor(outputs, dtype=torch.long, requires_grad=True)
-                    loss = loss_func(outputs, labels.float())  # change
+                    loss = loss_func(outputs, labels)  # change
                     # always the same 3 steps
                     self.optimizer.zero_grad()  # zero the parameter gradients
                     loss.backward(retain_graph=True)  # backpropagation
@@ -391,15 +394,15 @@ class DeepModels():
                         images = images.to(self.device)
                         labels = labels.to(self.device)
                         outputs = self.model(images)
-                        # soft_max = nn.Softmax()
-                        # _, predicted = torch.max(soft_max(outputs.data), 1)
-                        sig = nn.Sigmoid() # change
-                        predicted = sig(outputs.data) # change
-                        predicted[predicted >= 0.5] = 1 # change
-                        predicted[predicted < 0.5] = 0 # change
+                        soft_max = nn.Softmax(dim=1)
+                        predicted = torch.argmax(soft_max(outputs.data), 1)
+                        # sig = nn.Sigmoid() # change
+                        # predicted = sig(outputs.data) # change
+                        # predicted[predicted >= 0.5] = 1 # change
+                        # predicted[predicted < 0.5] = 0 # change
                         total_rr += labels.size(0)
                         total_correct += (predicted == labels).sum().item()
-                        val_loss += loss_func(outputs, labels.float()).data.item() # change
+                        val_loss += loss_func(outputs, labels).data.item() # change
                 val_loss /= len(testloader)
                 # Calculate training/test set accuracy of the existing model
                 train_accuracy, _ = self.calculate_accuracy(trainloader)
@@ -549,7 +552,7 @@ class DeepModels():
             torch.cuda.manual_seed(42)
             np.random.seed(42)
             testloader1 = torch.utils.data.DataLoader(
-                self.ds_test, batch_size=20, shuffle=True)
+                self.ds_test, batch_size=20, shuffle=False)
             testloader2 = torch.utils.data.DataLoader(
                 self.ds_test, batch_size=20, shuffle=True)
 
@@ -584,7 +587,7 @@ class DeepModels():
                     res_thresh[res_thresh > thresh] = 1
                     res_thresh[res_thresh <= thresh] = 0
                     naive_est = torch.zeros_like(y)
-                    naive_pred += torch.sum(naive_est ==y)
+                    naive_pred += torch.sum(naive_est == y)
                     correct_pred += torch.sum(res_thresh == y)
                     total += len(y)
                     with torch.no_grad():
@@ -592,7 +595,7 @@ class DeepModels():
                             conf_naive[l.item(), naive_est[i].item()] += 1
                             conf_nn[l.item(), res_thresh.int()[i].item()] += 1
                 elif loss_func == 'constructive':
-                    constructive_obj = ContrastiveLoss()
+                    constructive_obj = ContrastiveLoss(mode='cosine')
                     for j in range(outputs1.shape[0]):
                         temp = torch.tile(outputs1[j, :], (outputs1.shape[0], 1))
                         res_tmp, _ = constructive_obj.forward(temp, outputs2, labels1, labels2, flag=1)
@@ -602,7 +605,7 @@ class DeepModels():
                     res_thresh[res_thresh < thresh] = 1
                     res_thresh[res_thresh >= thresh] = 0
                     naive_est = torch.zeros_like(y)
-                    naive_pred += torch.sum(naive_est ==y)
+                    naive_pred += torch.sum(naive_est == y)
                     correct_pred += torch.sum(res_thresh == y)
                     total += len(y)
                     with torch.no_grad():
@@ -629,7 +632,6 @@ class DeepModels():
             # print(conf_nn)
             return conf_nn, acc
 
-
     def calculate_accuracy(self, trainloader):
         self.model.eval()  # put in evaluation mode
         total_correct = 0
@@ -644,12 +646,12 @@ class DeepModels():
                 images = images.to(self.device)
                 labels = labels.to(self.device)
                 outputs = self.model(images)
-                # soft_max = nn.Softmax()
-                # _, predicted = torch.max(soft_max(outputs.data), 1)
-                sig = nn.Sigmoid() # change
-                predicted = sig(outputs.data) # change
-                predicted[predicted >= 0.5] = 1 # change
-                predicted[predicted < 0.5] = 0 # change
+                soft_max = nn.Softmax(dim=1)
+                predicted = torch.argmax(soft_max(outputs.data), 1)
+                # sig = nn.Sigmoid() # change
+                # predicted = sig(outputs.data) # change
+                # predicted[predicted >= 0.5] = 1 # change
+                # predicted[predicted < 0.5] = 0 # change
                 total_rr += labels.size(0)
                 total_correct += (predicted == labels).sum().item()
                 for i, l in enumerate(labels):
