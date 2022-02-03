@@ -87,9 +87,11 @@ class Dataloader:
             ds_output = f[matching[1]].value.astype(int)
             self.ds_output = pd.DataFrame(ds_output.T, columns=['id', 'age', 'med', 'win_num'])
             self.loaded = True
-            lbls_drop = self.ds_input[(self.ds_output['id'] == 726) & (self.ds_output['age'] == 27)].index
-            self.ds_input.drop(labels=lbls_drop, inplace=True)
-            self.ds_output.drop(labels=lbls_drop, inplace=True)
+            #todo: check why dropping 726 in the age of 27 does not work in main
+
+            # lbls_drop = self.ds_input[(self.ds_output['id'] == 726) & (self.ds_output['age'] == 27)].index
+            # self.ds_input.drop(labels=lbls_drop, inplace=True)
+            # self.ds_output.drop(labels=lbls_drop, inplace=True)
             return self.ds_input, self.ds_output
 
     def split(self, seed=42, test_size=0.2):

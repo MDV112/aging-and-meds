@@ -17,10 +17,10 @@ import seaborn as sns
 from deep_models import ContrastiveLoss
 
 if __name__ == '__main__':
-    red_dim = True  # apply dimensionality reduction
-    vis = True
+    red_dim = False  # apply dimensionality reduction
+    vis = False
     device = torch.device("cuda:3" if torch.cuda.is_available() else "cpu")
-    data = Dataloader(dataset_name=[1, 0])  # input_type='raw', dataset_name=250)
+    data = Dataloader(input_type='raw', dataset_name=250)
     data.load()
     data.split()
     drop_indices = [0, 1, 4, 9, 10, 12, 13, 15, 17]
