@@ -1,4 +1,6 @@
 from data_loader import Dataloader
+from test_general_dataset import TorchDatasetEnd2End
+from test_general_dataset import MLP
 # from run import Run
 from models import Models
 from torch.utils.data import Dataset
@@ -79,43 +81,43 @@ class TorchDataset(Dataset):
         sample = (x, y)
         return sample
 
-class MLP(torch.nn.Module):
-
-    def __init__(self, input_shape, num_hidden=[25, 10], dropout=0.2):
-        super(MLP, self).__init__()
-        self.fc1 = nn.Sequential(
-            # nn.BatchNorm1d(input_shape, track_running_stats=False),
-            nn.Linear(input_shape, num_hidden[0]),
-            # nn.BatchNorm1d(num_hidden[0], track_running_stats=False),
-            nn.ReLU(),
-            # nn.ReLU(),
-            # nn.Dropout(dropout)
-        )
-        self.fc2 = nn.Sequential(
-            nn.Linear(num_hidden[0], num_hidden[1]),
-            # nn.BatchNorm1d(num_hidden[1], track_running_stats=False),
-            nn.ReLU(),
-            # nn.Dropout(dropout)
-        )
-        self.fc3 = nn.Sequential(
-            nn.Linear(num_hidden[1], 1),
-            # nn.BatchNorm1d(num_hidden[1], track_running_stats=False),
-            # nn.ReLU(),
-            # nn.Dropout(dropout)
-        )
-
-
-    def forward(self, x):
-        x = x.view(x.size(0), -1)
-        out = self.fc1(x)
-        out = self.fc2(out)
-        out = self.fc3(out)
-        # collapse
-        # out = out.view(out.size(0), -1)
-        # out = self.soft_max(out) #NO NEED
-        # out = self.sigmoid(out)
-        out = out.squeeze()
-        return out
+# class MLP(torch.nn.Module):
+#
+#     def __init__(self, input_shape, num_hidden=[25, 10], dropout=0.2):
+#         super(MLP, self).__init__()
+#         self.fc1 = nn.Sequential(
+#             # nn.BatchNorm1d(input_shape, track_running_stats=False),
+#             nn.Linear(input_shape, num_hidden[0]),
+#             # nn.BatchNorm1d(num_hidden[0], track_running_stats=False),
+#             nn.ReLU(),
+#             # nn.ReLU(),
+#             # nn.Dropout(dropout)
+#         )
+#         self.fc2 = nn.Sequential(
+#             nn.Linear(num_hidden[0], num_hidden[1]),
+#             # nn.BatchNorm1d(num_hidden[1], track_running_stats=False),
+#             nn.ReLU(),
+#             # nn.Dropout(dropout)
+#         )
+#         self.fc3 = nn.Sequential(
+#             nn.Linear(num_hidden[1], 1),
+#             # nn.BatchNorm1d(num_hidden[1], track_running_stats=False),
+#             # nn.ReLU(),
+#             # nn.Dropout(dropout)
+#         )
+#
+#
+#     def forward(self, x):
+#         x = x.view(x.size(0), -1)
+#         out = self.fc1(x)
+#         out = self.fc2(out)
+#         out = self.fc3(out)
+#         # collapse
+#         # out = out.view(out.size(0), -1)
+#         # out = self.soft_max(out) #NO NEED
+#         # out = self.sigmoid(out)
+#         out = out.squeeze()
+#         return out
 
 
 def set_data(dx, dy):
@@ -272,6 +274,7 @@ def add_age_col(df):
     df.index = tag
     df['Age'] = age
 
+
 def set_y_exp(df_x_control, df_x_abk):
     tags = np.unique(df_x_control.index.values)
     y_control = df_x_control[df_x_control['Age'].astype(int) > 6]
@@ -361,11 +364,11 @@ def convert2torch(scaled_train, scaled_test):
 
 
 if __name__ == '__main__':
-    exp_flag = 1
+    exp_flag = 0
     mlp = 1
     T = 3  # trajectories
-    tpm = 20  # , trj_per_mouse_per_age
-    device = torch.device("cuda:3" if torch.cuda.is_available() else "cpu")
+    tpm = 200  # , trj_per_mouse_per_age
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     data = Dataloader(dataset_name=[1, 0])  # input_type='raw', dataset_name=250)
     data.load()
     t = np.unique(data.ds_output['id'])
@@ -384,6 +387,7 @@ if __name__ == '__main__':
     if exp_flag:
         x_control_train, x_abk_train = set_exp_data(data.x_train_specific, data.y_train_specific)
         x_control_test, x_abk_test = set_exp_data(data.x_test_specific, data.y_test_specific)
+        # x_control_test, x_abk_test, yy_control_test, yy_abk_test = set_data(data.x_test_specific, data.y_test_specific)
     else:
         x_control_train, x_abk_train, yy_control_train, yy_abk_train = set_data(data.x_train_specific, data.y_train_specific)
         x_control_test, x_abk_test, yy_control_test, yy_abk_test = set_data(data.x_test_specific, data.y_test_specific)
@@ -419,110 +423,116 @@ if __name__ == '__main__':
     if exp_flag:
         tr_x_c, tr_x_a, tr_y_c, tr_y_a = reshape_exp(train_tuple, T=T, trj_per_mouse_per_age=tpm)
         ts_x_c, ts_x_a, ts_y_c, ts_y_a = reshape_exp(test_tuple, T=T, trj_per_mouse_per_age=tpm)
+        # ts_x_c, ts_x_a, ts_y_c, ts_y_a = reshape_df_by_id(test_tuple[0], test_tuple[1], test_tuple[2], test_tuple[3], yy_test, T=T)
     else:
         tr_x_c, tr_x_a, tr_y_c, tr_y_a = reshape_df_by_id(train_tuple[0], train_tuple[1], train_tuple[2], train_tuple[3], yy_train, T=T)
         ts_x_c, ts_x_a, ts_y_c, ts_y_a = reshape_df_by_id(test_tuple[0], test_tuple[1], test_tuple[2], test_tuple[3], yy_test, T=T)
 
+    with open('no_exp_test.pkl', 'wb') as f:
+        pickle.dump([ts_x_c, ts_x_a, ts_y_c, ts_y_a, max_age], f)
+    with open('x_y.pkl', 'wb') as f:
+        pickle.dump([tr_x_c, tr_x_a, tr_y_c, tr_y_a, ts_x_c, ts_x_a, ts_y_c, ts_y_a, max_age], f)
+    # batch_size = int(np.ceil(0.1*tr_x_c.shape[0]))
+    # learning_rate = 5e-4
+    # epochs = 350
+    # device = torch.device("cuda:2" if torch.cuda.is_available() else "cpu")
+    # # trainset = TorchDataset((tr_x_c, max_age))
+    # # testset = TorchDataset((ts_x_c, max_age))
+    # trainset = TorchDatasetEnd2End([tr_x_c, tr_x_a, tr_y_c, tr_y_a], max_age)
+    # testset = TorchDatasetEnd2End([ts_x_c, ts_x_a, ts_y_c, ts_y_a], max_age)
 
-    batch_size = int(np.ceil(0.1*tr_x_c.shape[0]))
-    learning_rate = 5e-4
-    epochs = 350
-    device = torch.device("cuda:4" if torch.cuda.is_available() else "cpu")
-    # tr_x_c = torch.from_numpy(tr_x_c.X.values).float()
-    # ts_x_c = torch.from_numpy(ts_x_c.X.values).float()
-    trainset = TorchDataset((tr_x_c, max_age))
-    testset = TorchDataset((ts_x_c, max_age))
+    # torch.save([trainset, testset], 'train_test.pt')
     # dataloaders - creating batches and shuffling the data
-    trainloader = torch.utils.data.DataLoader(
-        trainset, batch_size=batch_size, shuffle=True, num_workers=1)
-    testloader = torch.utils.data.DataLoader(
-        testset, batch_size=batch_size, shuffle=False, num_workers=1)
-    # device - cpu or gpu?
-
-    # loss criterion
-    criterion = nn.MSELoss()
-    # build our model and send it to the device
-    model = MLP(tr_x_c.shape[1]) # no need for parameters as we alredy defined them in the class
-    # optimizer - SGD, Adam, RMSProp...
-    model = model.to(device)
-    optimizer = torch.optim.Adam(model.parameters(), lr=learning_rate)
-    for epoch in range(1, epochs + 1):
-        model.train()  # put in training mode
-        running_loss = 0.0
-        for i, data in enumerate(trainloader, 0):
-            inputs, labels = data
-            # send them to device
-            inputs = inputs.to(device)
-            labels = labels.to(device)
-            # forward + backward + optimize
-            outputs = model(inputs)  # forward pass
-            loss = criterion(outputs, labels)  # calculate the loss
-            # always the same 3 steps
-            optimizer.zero_grad()  # zero the parameter gradients
-            loss.backward()  # backpropagation
-            optimizer.step()  # update parameters
-            # print statistics
-            new_outputs = torch.zeros_like(outputs).to(device)
-            ref = torch.arange(0, 30, 3).to(device)
-            for idx, out in enumerate(outputs):
-                new_outputs[idx] = ref[torch.argmin(torch.abs(ref-out))]
-            new_loss = criterion(new_outputs, labels)
-            running_loss += new_loss.data.item()
-            # Normalizing the loss by the total number of train batches
-        running_loss /= len(trainloader)
-        log = "Epoch: {} | Loss: {:.4f}".format(epoch, running_loss)
-        print(log)
-    for i, data in enumerate(testloader, 0):
-        model.eval()
-        inputs, labels = data
-        # send them to device
-        inputs = inputs.to(device)
-        labels = labels.to(device)
-        outputs = model(inputs)  # forward pass
-        new_outputs = torch.zeros_like(outputs).to(device)
-        ref = torch.arange(0, 30, 3).to(device)
-        for idx, out in enumerate(outputs):
-            new_outputs[idx] = ref[torch.argmin(torch.abs(ref-out))]
-        outputs = new_outputs
-        loss = criterion(outputs, labels)  # calculate the loss
-        running_loss += loss.data.item()
-        # Normalizing the loss by the total number of train batches
-    running_loss /= len(testloader)
-    log = "The loss of the batch test number {} is {:.4f}".format(i, running_loss)
-    print(log)
-
-
-
-
-
-
-    scaler = MinMaxScaler()
-
-    scaled_train, scaled_test = scale_data([tr_x_c, tr_x_a, tr_y_c, tr_y_a], [ts_x_c, ts_x_a, ts_y_c, ts_y_a])
-
-    X_train, Y_train, X_test, Y_test = convert2torch(scaled_train, scaled_test)
-
-    with open('new_train_test.pkl', 'wb') as f:
-        pickle.dump([X_train, X_test, Y_train, Y_test, T], f)
-
-    # train_tuple, val_tuple = split_train([x_control_train, x_abk_train, yy_control_train, yy_abk_train])
-    # yy_val = np.unique(val_tuple[0].index)
-    # tr_x_c, tr_x_a, tr_y_c, tr_y_a = reshape_df_by_id(train_tuple[0], train_tuple[1], train_tuple[2], train_tuple[3], yy_train, T=2)
-    # v_x_c, v_x_a, v_y_c, v_y_a = reshape_df_by_id(val_tuple[0], val_tuple[1], val_tuple[2], val_tuple[3], yy_val, T=2)
-    #
-    # scaled_train, scaled_val = scale_data([tr_x_c, tr_x_a, tr_y_c, tr_y_a], [v_x_c, v_x_a, v_y_c, v_y_a])
-    #
-    # X_train, Y_train, X_val, Y_val = convert2torch(scaled_train, scaled_val)
-    #
-    # with open('new_train_val.pkl', 'wb') as f:
-    #     pickle.dump([X_train, X_val, Y_train, Y_val, T], f)
-
-
-    a=1
-
-# with open('train_val.pkl', 'rb') as handle:
-#     b = pickle.load(handle)
-
+#     trainloader = torch.utils.data.DataLoader(
+#         trainset, batch_size=batch_size, shuffle=True, num_workers=1)
+#     testloader = torch.utils.data.DataLoader(
+#         testset, batch_size=batch_size, shuffle=False, num_workers=1)
+#     # device - cpu or gpu?
+#
+#     # loss criterion
+#     criterion = nn.MSELoss()
+#     # build our model and send it to the device
+#     model = MLP(tr_x_c.shape[1]) # no need for parameters as we already defined them in the class
+#     # optimizer - SGD, Adam, RMSProp...
+#     model = model.to(device)
+#     optimizer = torch.optim.Adam(model.parameters(), lr=learning_rate)
+#     for epoch in range(1, epochs + 1):
+#         model.train()  # put in training mode
+#         running_loss = 0.0
+#         for i, data in enumerate(trainloader, 0):
+#             inputs, labels = data
+#             # send them to device
+#             inputs = inputs.to(device)
+#             labels = labels.to(device)
+#             # forward + backward + optimize
+#             outputs = model(inputs)  # forward pass
+#             loss = criterion(outputs, labels)  # calculate the loss
+#             # always the same 3 steps
+#             optimizer.zero_grad()  # zero the parameter gradients
+#             loss.backward()  # backpropagation
+#             optimizer.step()  # update parameters
+#             # print statistics
+#             new_outputs = torch.zeros_like(outputs).to(device)
+#             ref = torch.arange(0, 30, 3).to(device)
+#             for idx, out in enumerate(outputs):
+#                 new_outputs[idx] = ref[torch.argmin(torch.abs(ref-out))]
+#             new_loss = criterion(new_outputs, labels)
+#             running_loss += new_loss.data.item()
+#             # Normalizing the loss by the total number of train batches
+#         running_loss /= len(trainloader)
+#         log = "Epoch: {} | Loss: {:.4f}".format(epoch, running_loss)
+#         print(log)
+#     for i, data in enumerate(testloader, 0):
+#         model.eval()
+#         inputs, labels = data
+#         # send them to device
+#         inputs = inputs.to(device)
+#         labels = labels.to(device)
+#         outputs = model(inputs)  # forward pass
+#         new_outputs = torch.zeros_like(outputs).to(device)
+#         ref = torch.arange(0, 30, 3).to(device)
+#         for idx, out in enumerate(outputs):
+#             new_outputs[idx] = ref[torch.argmin(torch.abs(ref-out))]
+#         outputs = new_outputs
+#         loss = criterion(outputs, labels)  # calculate the loss
+#         running_loss += loss.data.item()
+#         # Normalizing the loss by the total number of train batches
+#     running_loss /= len(testloader)
+#     log = "The loss of the batch test number {} is {:.4f}".format(i, running_loss)
+#     print(log)
+#
+#
+#
+#
+#
+#
+#     scaler = MinMaxScaler()
+#
+#     scaled_train, scaled_test = scale_data([tr_x_c, tr_x_a, tr_y_c, tr_y_a], [ts_x_c, ts_x_a, ts_y_c, ts_y_a])
+#
+#     X_train, Y_train, X_test, Y_test = convert2torch(scaled_train, scaled_test)
+#
+#     with open('new_train_test.pkl', 'wb') as f:
+#         pickle.dump([X_train, X_test, Y_train, Y_test, T], f)
+#
+#     # train_tuple, val_tuple = split_train([x_control_train, x_abk_train, yy_control_train, yy_abk_train])
+#     # yy_val = np.unique(val_tuple[0].index)
+#     # tr_x_c, tr_x_a, tr_y_c, tr_y_a = reshape_df_by_id(train_tuple[0], train_tuple[1], train_tuple[2], train_tuple[3], yy_train, T=2)
+#     # v_x_c, v_x_a, v_y_c, v_y_a = reshape_df_by_id(val_tuple[0], val_tuple[1], val_tuple[2], val_tuple[3], yy_val, T=2)
+#     #
+#     # scaled_train, scaled_val = scale_data([tr_x_c, tr_x_a, tr_y_c, tr_y_a], [v_x_c, v_x_a, v_y_c, v_y_a])
+#     #
+#     # X_train, Y_train, X_val, Y_val = convert2torch(scaled_train, scaled_val)
+#     #
+#     # with open('new_train_val.pkl', 'wb') as f:
+#     #     pickle.dump([X_train, X_val, Y_train, Y_val, T], f)
+#
+#
+#     a=1
+#
+# # with open('train_val.pkl', 'rb') as handle:
+# #     b = pickle.load(handle)
+#
 
 
 

@@ -86,6 +86,8 @@ class DimRed():
                 y = y_test
             obj_vis = self.visualize(Z, y, fname, label_dict)
             return obj_vis
+        else:
+            return Z_train, Z_test
 
     def visualize(self, Z, y, fname, label_dict, plot_labels=True):
         if fname == None:

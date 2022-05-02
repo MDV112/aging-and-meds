@@ -15,8 +15,14 @@ from deep_models import DeepModels
 # from data_loader import TorchDataset
 import seaborn as sns
 from deep_models import ContrastiveLoss
+import pickle
+
 
 if __name__ == '__main__':
+    with open('y_label.pkl', 'rb') as f:
+        yy = pickle.load(f)
+    with open('x_y.pkl', 'rb') as f:
+        tr_x_c, tr_x_a, tr_y_c, tr_y_a, ts_x_c, ts_x_a, ts_y_c, ts_y_a, max_age = pickle.load(f)
     red_dim = False  # apply dimensionality reduction
     vis = False
     device = torch.device("cuda:3" if torch.cuda.is_available() else "cpu")

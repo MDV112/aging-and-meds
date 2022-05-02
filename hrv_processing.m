@@ -13,8 +13,8 @@ function [] = hrv_processing(data_type,win_len,phase)
                 abk_hrv = batch_data_abk.hrv_tables('ALL');
                 count = count + size(bas_hrv,1) + size(abk_hrv,1);
             end
-            h5create('C:\Users\smorandv.STAFF\Documents\PhD\aging and meds\hrv.h5',['/aging/win_len_' num2str(win_len) '_phase_' num2str(phase) '_input'],[count size(abk_hrv,2)])
-            h5create('C:\Users\smorandv.STAFF\Documents\PhD\aging and meds\hrv.h5',['/aging/win_len_' num2str(win_len) '_phase_' num2str(phase) '_label'],[count 4])
+            h5create('C:\Users\smorandv.STAFF\Documents\PhD\aging and meds\hrv_mse.h5',['/aging/win_len_' num2str(win_len) '_phase_' num2str(phase) '_input'],[count size(abk_hrv,2)])
+            h5create('C:\Users\smorandv.STAFF\Documents\PhD\aging and meds\hrv_mse.h5',['/aging/win_len_' num2str(win_len) '_phase_' num2str(phase) '_label'],[count 4])
             hrv_name = ['win_len_' num2str(win_len) '_phase_' num2str(phase) '_input'];
             y_name = ['win_len_' num2str(win_len) '_phase_' num2str(phase) '_label'];
             h = 1;
@@ -38,9 +38,9 @@ function [] = hrv_processing(data_type,win_len,phase)
                     win_num = str2double(n(idx+1:end));
                     hrv_feat = bas_mat(j,:);
                     y = [id age med win_num];
-                    h5write('C:\Users\smorandv.STAFF\Documents\PhD\aging and meds\hrv.h5',['/aging/' hrv_name],hrv_feat, [h 1],size(hrv_feat))
-                    h5write('C:\Users\smorandv.STAFF\Documents\PhD\aging and meds\hrv.h5',['/aging/' y_name],y, [h 1],size(y))
-                    fprintf('saved %d/%d to C:\\Users\\smorandv.STAFF\\Documents\\PhD\\aging and meds\\hrv.h5 \n',h,count)
+                    h5write('C:\Users\smorandv.STAFF\Documents\PhD\aging and meds\hrv_mse.h5',['/aging/' hrv_name],hrv_feat, [h 1],size(hrv_feat))
+                    h5write('C:\Users\smorandv.STAFF\Documents\PhD\aging and meds\hrv_mse.h5',['/aging/' y_name],y, [h 1],size(y))
+                    fprintf('saved %d/%d to C:\\Users\\smorandv.STAFF\\Documents\\PhD\\aging and meds\\hrv_mse.h5 \n',h,count)
                     h = h + 1;
                 end
 
@@ -59,9 +59,9 @@ function [] = hrv_processing(data_type,win_len,phase)
                     win_num = str2double(n(idx+1:end));
                     hrv_feat = abk_mat(j,:);
                     y = [id age med win_num];
-                    h5write('C:\Users\smorandv.STAFF\Documents\PhD\aging and meds\hrv.h5',['/aging/' hrv_name],hrv_feat, [h 1],size(hrv_feat))
-                    h5write('C:\Users\smorandv.STAFF\Documents\PhD\aging and meds\hrv.h5',['/aging/' y_name],y, [h 1],size(y))
-                    fprintf('saved %d/%d to C:\\Users\\smorandv.STAFF\\Documents\\PhD\\aging and meds\\hrv.h5 \n',h,count)
+                    h5write('C:\Users\smorandv.STAFF\Documents\PhD\aging and meds\hrv_mse.h5',['/aging/' hrv_name],hrv_feat, [h 1],size(hrv_feat))
+                    h5write('C:\Users\smorandv.STAFF\Documents\PhD\aging and meds\hrv_mse.h5',['/aging/' y_name],y, [h 1],size(y))
+                    fprintf('saved %d/%d to C:\\Users\\smorandv.STAFF\\Documents\\PhD\\aging and meds\\hrv_mse.h5 \n',h,count)
                     h = h + 1;
                 end
             end

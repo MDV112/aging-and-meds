@@ -110,6 +110,13 @@ class Dataloader:
             id = np.unique(self.ds_output['id'])
             np.random.seed(seed=seed)
             rand_idx = np.random.randint(id.shape[0], size=(int(np.ceil(test_size*id.shape[0])),))
+            age_30 = [559, 727, 730, 751]  # tags of age 30
+            idx_30_list = [np.where(id == val) for val in age_30]  # indices in id of 30 months old mice
+            if np.any(np.in1d(idx_30_list, rand_idx)):  # make sure that at least one of the 30 months old mice is in the test set
+                pass
+            else:
+                rand_idx[-1] = idx_30_list[np.random.randint(len(idx_30_list))][0].item()
+
             test_mice = list(id[rand_idx])
             p = list(id)
             train_mice = [i for j, i in enumerate(p) if j not in rand_idx]
