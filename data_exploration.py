@@ -364,10 +364,10 @@ def convert2torch(scaled_train, scaled_test):
 
 
 if __name__ == '__main__':
-    exp_flag = 0
+    exp_flag = 1
     mlp = 1
     T = 3  # trajectories
-    tpm = 200  # , trj_per_mouse_per_age
+    tpm = 250  # , trj_per_mouse_per_age
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     data = Dataloader(dataset_name=[1, 0])  # input_type='raw', dataset_name=250)
     data.load()
@@ -376,7 +376,7 @@ if __name__ == '__main__':
     for p in t:
         temp = data.ds_output.loc[data.ds_output['id'] == p, 'age']
         max_age[p] = temp.max()
-    data.split(test_size=0.2)
+    data.split(test_size=0.2, seed=0)
     drop_indices = [0, 1, 4, 9, 10, 12, 13, 15, 17]
     feat_list = data.feat_names
     feat2drop = [feat_list[i] for i in drop_indices]
@@ -384,10 +384,14 @@ if __name__ == '__main__':
     win_num = 10//data.dataset_name[0]  # num of windows in 10 min
     label_dict = {'k_id': 'all', 'med': [0, 1], 'age': 'all', 'win_num': win_num, 'seed': 42}
     data.choose_specific_xy(label_dict=label_dict)
+
+    # m = np.mean(np.array([max_age[tag] - 6 for tag in max_age.keys()]))  # used for Jonathan
+
+
     if exp_flag:
         x_control_train, x_abk_train = set_exp_data(data.x_train_specific, data.y_train_specific)
-        x_control_test, x_abk_test = set_exp_data(data.x_test_specific, data.y_test_specific)
-        # x_control_test, x_abk_test, yy_control_test, yy_abk_test = set_data(data.x_test_specific, data.y_test_specific)
+        # x_control_test, x_abk_test = set_exp_data(data.x_test_specific, data.y_test_specific)
+        x_control_test, x_abk_test, yy_control_test, yy_abk_test = set_data(data.x_test_specific, data.y_test_specific)
     else:
         x_control_train, x_abk_train, yy_control_train, yy_abk_train = set_data(data.x_train_specific, data.y_train_specific)
         x_control_test, x_abk_test, yy_control_test, yy_abk_test = set_data(data.x_test_specific, data.y_test_specific)
@@ -396,7 +400,9 @@ if __name__ == '__main__':
     if exp_flag:
         for df in (x_control_train, x_abk_train):
             add_age_col(df)
-        for df in (x_control_test, x_abk_test):
+        # for df in (x_control_test, x_abk_test):
+        #     add_age_col(df)
+        for df in (x_control_test, x_abk_test, yy_control_test, yy_abk_test):
             add_age_col(df)
     # #todo: NOTICE THAT IF WE USE TORCHDATASER LATER ON, THEN X AGE ENDS 3 MONTHS EARLIER THAN Y
     #     if mlp:
@@ -405,7 +411,7 @@ if __name__ == '__main__':
     #         # hyper-parameters
 
         x_control_train, x_abk_train, yy_control_train, yy_abk_train = set_y_exp(x_control_train, x_abk_train)
-        x_control_test, x_abk_test, yy_control_test, yy_abk_test = set_y_exp(x_control_test, x_abk_test)
+        # x_control_test, x_abk_test, yy_control_test, yy_abk_test = set_y_exp(x_control_test, x_abk_test)
     else:
         for df in (x_control_train, x_abk_train, yy_control_train, yy_abk_train):
             add_age_col(df)
@@ -422,8 +428,8 @@ if __name__ == '__main__':
 
     if exp_flag:
         tr_x_c, tr_x_a, tr_y_c, tr_y_a = reshape_exp(train_tuple, T=T, trj_per_mouse_per_age=tpm)
-        ts_x_c, ts_x_a, ts_y_c, ts_y_a = reshape_exp(test_tuple, T=T, trj_per_mouse_per_age=tpm)
-        # ts_x_c, ts_x_a, ts_y_c, ts_y_a = reshape_df_by_id(test_tuple[0], test_tuple[1], test_tuple[2], test_tuple[3], yy_test, T=T)
+        # ts_x_c, ts_x_a, ts_y_c, ts_y_a = reshape_exp(test_tuple, T=T, trj_per_mouse_per_age=tpm)
+        ts_x_c, ts_x_a, ts_y_c, ts_y_a = reshape_df_by_id(test_tuple[0], test_tuple[1], test_tuple[2], test_tuple[3], yy_test, T=T)
     else:
         tr_x_c, tr_x_a, tr_y_c, tr_y_a = reshape_df_by_id(train_tuple[0], train_tuple[1], train_tuple[2], train_tuple[3], yy_train, T=T)
         ts_x_c, ts_x_a, ts_y_c, ts_y_a = reshape_df_by_id(test_tuple[0], test_tuple[1], test_tuple[2], test_tuple[3], yy_test, T=T)

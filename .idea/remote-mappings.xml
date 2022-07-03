@@ -10,6 +10,13 @@
             </list>
           </settings>
         </remote-mappings>
+        <remote-mappings server-id="python@sftp://smorandv@132.68.39.93:22/home/smorandv/miniconda3/envs/ac8aging/bin/python">
+          <settings>
+            <list>
+              <mapping local-root="$PROJECT_DIR$" remote-root="/home/smorandv/ac8_and_aging" />
+            </list>
+          </settings>
+        </remote-mappings>
       </list>
     </list>
   </component>

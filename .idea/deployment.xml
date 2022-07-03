@@ -5,7 +5,36 @@
       <paths name="smorandv@132.68.39.93:22">
         <serverdata>
           <mappings>
-            <mapping deploy="/home/smorandv/ac8_and_aging" local="$PROJECT_DIR$" />
+            <mapping deploy="/ac8_and_aging" local="$PROJECT_DIR$" web="/" />
+            <mapping deploy="" local="" web="" />
+          </mappings>
+        </serverdata>
+      </paths>
+      <paths name="smorandv@132.68.39.93:22 (1)">
+        <serverdata>
+          <mappings>
+            <mapping local="$PROJECT_DIR$" web="/" />
+          </mappings>
+        </serverdata>
+      </paths>
+      <paths name="smorandv@132.68.39.93:22 (2)">
+        <serverdata>
+          <mappings>
+            <mapping local="$PROJECT_DIR$" web="/" />
+          </mappings>
+        </serverdata>
+      </paths>
+      <paths name="smorandv@132.68.39.93:22 (3)">
+        <serverdata>
+          <mappings>
+            <mapping local="$PROJECT_DIR$" web="/" />
+          </mappings>
+        </serverdata>
+      </paths>
+      <paths name="smorandv@132.68.39.93:22 password">
+        <serverdata>
+          <mappings>
+            <mapping local="$PROJECT_DIR$" web="/" />
           </mappings>
         </serverdata>
       </paths>

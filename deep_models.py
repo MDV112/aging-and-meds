@@ -131,12 +131,35 @@ def cov(m1, m2, rowvar=False):
     return fact * mt.matmul(m2).squeeze()
 
 
-def cosine_loss(out1, out2, lbl1, lbl2, flag=0, lmbda1=1, lmbda2=1):
-    cos = nn.CosineSimilarity()
+def cosine_loss(out1, out2, lbl1, lbl2, flag=0, lmbda=1, b=0):
+    """
+
+    :param out1: representation in latent space of input1
+    :param out2: representation in latent space of input2
+    :param lbl1: id of input1
+    :param lbl2: id of input2
+    :param flag: 0: return only the loss, 1: return cosine distance and equality label
+    :param lmbda: controls FAR. The larger lmbda is, the smaller the FAR
+    :param b: scalar in [-1,1]. Controls the threshold for deciding if two inputs are the same or not. By default, if out1 and out2 are
+     "less" than perpendicular thus they considered the same. We can treat b as cos(theta) where theta is the angle
+     between representations.
+    :return:
+    """
+    if flag == 2:
+        cos = nn.MSELoss()
+    else:
+        cos = nn.CosineSimilarity()
     res = cos(out1, out2)
     res = res.t()
     y = 1*(lbl1 == lbl2)
-    batch_loss = lmbda1*(1 - y) * res + lmbda2*y*(1 - res)
+    # batch_loss = lmbda1*(1 - y) * res + lmbda2*y*(1 - res)
+    #
+    # batch_loss = (1-y*(1+lmbda))*res
+    if flag == 2:
+        batch_loss = (1-2*y)*res
+        return batch_loss.mean()
+    else:
+        batch_loss = -lmbda*y*(b + res) + (1 - y)*res
     loss = batch_loss.mean()
     if flag:
         return res, y
@@ -880,7 +903,7 @@ class Advrtset(nn.Module):
         out = out.view(out.size(0), -1)
         for i in range(len(self.conv) - len(self.num_hidden), len(self.conv)):  # todo: check if range is true
         # linear layer
-            out = self.conv[i](out)
+            out = self.conv[i](out)  # NOTICE THAT HERE IT IS NOT CONVOLUTION BUT MLP
         # out = self.soft_max(out)
 
         return out
