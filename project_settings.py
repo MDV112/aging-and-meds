@@ -1,17 +1,17 @@
 import numpy as np
-from deep_models import Advrtset
-import torch.nn as nn
 import torch
 
-class ProSet():
+
+class ProSet:
     def __init__(self, mult_gpu=1):
-        self.entity = "morandv_team"  #wandb init
+        self.entity = "morandv_team"  # wandb init
+        self.med_mode = 'c'  # control or abk ('a')
         # data paths:
         self.train_path = '/home/smorandv/DynamicalSystems/DynamicalSystems/running_scripts/single_exp/x_y.pkl'
         self.test_path = '/home/smorandv/DynamicalSystems/DynamicalSystems/running_scripts/single_exp/no_exp_test.pkl'
-        # cosine loss parameters:
-        self.b = -0.8
-        self.lmbda = 1000
+        # cosine loss hyperparameters:
+        self.b = 0  # -0.8
+        self.lmbda = 1  # 1000
         self.flag = 0
         self.phi = np.pi
         # training hyperparameters:

@@ -36,6 +36,6 @@ if __name__ == '__main__':
     trainloader2 = torch.utils.data.DataLoader(
         tr_dataset_2, batch_size=p.batch_size, shuffle=False, num_workers=0)
 
-    train(model, p, optimizer, trainloader1, trainloader2)
+    train_model(model, p, optimizer, trainloader1, trainloader1, trainloader1, trainloader2)
 
     # wandb.finish()

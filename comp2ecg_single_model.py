@@ -39,6 +39,7 @@ class HRVDataset(Dataset):
         :param mode: used for second dataset
         :return:
         """
+        # np.random.seed(5)
         if self.mode:
             y = self.y[idx]
             r = np.random.randint(2)  # 50%-50%
