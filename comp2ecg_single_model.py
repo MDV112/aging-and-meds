@@ -12,14 +12,20 @@ from deep_models import Advrtset
 from deep_models import cosine_loss
 from tqdm import tqdm
 from torch.utils.data import Dataset
+import wandb
+
+
 
 
 class HRVDataset(Dataset):
+
     def __init__(self, x, y, mode=0):
         # self.x = x.clone().detach().requires_grad_(True)
+        super().__init__()
         self.x = x.copy()
         self.y = np.array([int(val) for val in y])
         self.mode = mode
+
 
     def __len__(self):
         return self.x.shape[0]  # since we the transpose
@@ -70,31 +76,33 @@ if __name__ == '__main__':
     y_ts_a = x_ts_a.index
 
     batch_size = 2 ** 10
-
+    b = -0.8
+    lmbda = 1000
+    flag = 0
     # dataset = torch.from_numpy(data_tr[0].to_numpy().T)  # now every column is a feature vector
     # dataset.type(torch.float32)
     # dataset_X1 = torch.from_numpy(np.array(data_tr[0].values, dtype=np.float))
     # dataset_X2 = torch.from_numpy(np.array(data_tr[0].values, dtype=np.float))
     dataset_X1 = np.array(x_tr_c.values, dtype=np.float)
-    dataset_X2 = np.array(x_tr_c.values, dtype=np.float)
+    # dataset_X2 = np.array(x_tr_c.values, dtype=np.float)
     dataset_label = y_tr_c
 
     dataset_1 = HRVDataset(dataset_X1, dataset_label)
-    dataset_2 = HRVDataset(dataset_X2, dataset_label, mode=1)
+    dataset_2 = HRVDataset(dataset_X1, dataset_label, mode=1)
     # dataset_1 = HRVDataset(dataset_X1.type(torch.FloatTensor), dataset_label)
     # dataset_2 = HRVDataset(dataset_X2.type(torch.FloatTensor), dataset_label, mode=1)
     # dataset = torch.tensor(np.array(dataset, dtype=float))
 
-    num_epochs = 10
+    num_epochs = 4
     lr = 0.001
     phi = np.pi
     # Device configuration, as before
 
     # torch.backends.cuda.matmul.allow_tf32
     # create model, send it to device
-    device_ids = [2, 3, 4, 5]
+    device_ids = [1, 3, 4, 5, 6]
     device = torch.device('cuda:' + str(device_ids[0]) if torch.cuda.is_available() else 'cpu')
-    model2 = Advrtset(dataset_X2.shape[1], ker_size=2, stride=1, dial=1).to(device)
+    model2 = Advrtset(dataset_X1.shape[1], ker_size=2, stride=1, dial=1).to(device)
     parallel_net_2 = nn.DataParallel(model2, device_ids=device_ids)
     optimizer_2 = torch.optim.Adam(parallel_net_2.parameters(), lr=lr, weight_decay=1) #, momentum=0.9)
 
@@ -103,9 +111,9 @@ if __name__ == '__main__':
 
 
     trainloader1 = torch.utils.data.DataLoader(
-        dataset_1, batch_size=batch_size, shuffle=False)  # , num_workers=2)
+        dataset_1, batch_size=batch_size, shuffle=False, num_workers=0)
     trainloader2 = torch.utils.data.DataLoader(
-        dataset_2, batch_size=batch_size, shuffle=False)  # , num_workers=2)
+        dataset_2, batch_size=batch_size, shuffle=False, num_workers=0)
     for epoch in range(1, num_epochs + 1):
         epoch_time = time.time()
         running_loss = 0.0
@@ -123,7 +131,7 @@ if __name__ == '__main__':
             # forward + backward + optimize
             outputs1 = parallel_net_2(inputs1)  # forward pass
             outputs2 = parallel_net_2(inputs2)
-            loss = cosine_loss(outputs1, outputs2, labels1, labels2, flag=0, lmbda=1, b=0)
+            loss = cosine_loss(outputs1, outputs2, labels1, labels2, flag=flag, lmbda=lmbda, b=b)
             # zero the parameter gradients
             optimizer_2.zero_grad()
             loss.backward(retain_graph=True)  # backpropagation
@@ -180,11 +188,11 @@ if __name__ == '__main__':
             # if loss_func == 'cosine_loss':
             for j in range(outputs1.shape[0]):
                 temp = torch.tile(outputs1[j, :], (outputs1.shape[0], 1))
-                res_tmp, _ = cosine_loss(temp, outputs2, labels1, labels2, flag=1)
+                res_tmp, _ = cosine_loss(temp, outputs2, labels1, labels2, flag=1, lmbda=lmbda, b=b)
                 # res_tmp, _ = MI_cosine_loss(temp, outputs2, labels1, labels2, flag=1)
                 c += 1*(labels1[j].item() == labels2[res_tmp.argmax().item()].item())
             # res, y = MI_cosine_loss(outputs1, outputs2, labels1, labels2, flag=1)
-            res, y = cosine_loss(outputs1, outputs2, labels1, labels2, flag=1)
+            res, y = cosine_loss(outputs1, outputs2, labels1, labels2, flag=1, lmbda=lmbda, b=b)
             res_thresh = res.clone()
             res_thresh[res_thresh > tr] = 1
             res_thresh[res_thresh <= tr] = 0
@@ -194,8 +202,8 @@ if __name__ == '__main__':
             total += len(y)
             with torch.no_grad():
                 for i, l in enumerate(y):
-                    conf_naive[l.item(), naive_est[i].item()] += 1
-                    conf_nn[l.item(), res_thresh.int()[i].item()] += 1
+                    conf_naive[l.item(), naive_est[i].item()] += 1  # i.e. rows are gt and columns are preds
+                    conf_nn[l.item(), res_thresh.int()[i].item()] += 1  # i.e. rows are gt and columns are preds
         conf_mat_list.append(conf_nn)
         s = conf_nn.sum(axis=1)
         far[idx] = conf_nn[0, 1]/s[0]
