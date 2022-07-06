@@ -36,7 +36,7 @@ class HRVDataset(Dataset):
         the comparison is made 50% of the time with negative example and 50% with negative. The two
         datasets have shuffle=False. mode=1 will be only for the second dataset
         :param idx: index of sample
-        :param mode: used for second dataset
+        :param mode: used for second dataset to have 50% of the mice compared to the first dataset to be different
         :return:
         """
         # np.random.seed(5)
