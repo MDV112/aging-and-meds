@@ -831,7 +831,7 @@ class AdverserailCNN(nn.Module):
 
 class Advrtset(nn.Module):
 
-    def __init__(self, nbeats, num_chann=[20, 10, 30, 40, 30, 20], ker_size=10, stride=2,
+    def __init__(self, nbeats, p, num_chann=[20, 10, 30, 40, 30, 20], ker_size=10, stride=2,
                  dial=1, pad=0, drop_out=0.15, num_hidden=[60, 40]):
         super(Advrtset, self).__init__()
 
@@ -856,6 +856,7 @@ class Advrtset(nn.Module):
         self.num_hidden = num_hidden
         self.conv = nn.ModuleList()
         self.soft_max = nn.Softmax(dim=1)
+        self.p = p
 
         self.conv.append(nn.Sequential(
             nn.Conv1d(1, num_chann[0], kernel_size=ker_size[0], stride=stride[0], dilation=dial[0], padding=pad[0]),
@@ -909,11 +910,12 @@ class Advrtset(nn.Module):
             return out
         else:
             out = self.conv[0](x)
-            out = self.conv[1](out)
+            for j in range(1, self.p.e2_idx):
+                out = self.conv[j](out)
             aug = self.create_aug(out)
             # aug = torch.reshape(aug, (out.shape[0]*aug.shape[1], out.shape[1], out.shape[2])).type(torch.FloatTensor)
             ##### NOTICE STATRTING FROM 2 #######
-            for i in range(2, len(self.conv) - len(self.num_hidden)):  # todo: check if range is true
+            for i in range(self.p.e2_idx, len(self.conv) - len(self.num_hidden)):  # todo: check if range is true
                 out = self.conv[i](out)
                 aug = self.conv[i](aug)
             aug_loss = self.L_aug(out, aug)
@@ -952,8 +954,6 @@ class Advrtset(nn.Module):
         for j, pos_pair in enumerate(zip(Z, phi_A), 0):
             z, phi_A_pos = pos_pair
             vec_neg = vec_idx[~np.isin(vec_idx, j)]
-            if n > len(vec_neg):
-                raise Exception('Number of augmentations hast to be maximun batch_size-2')
             perm = torch.randperm(len(vec_neg))
             v_bar = phi_A[perm[:n]]
             # set v_bar as a mtrix with n rows and flattened data

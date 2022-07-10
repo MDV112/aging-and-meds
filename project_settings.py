@@ -21,11 +21,14 @@ class ProSet:
         self.flag = 0
         self.phi = np.pi
         # training hyperparameters:
-        self.num_epochs = 10
+        self.num_epochs = 100
+        self.pretraining_epoch = 2
+        self.reg_aug = 1
         self.lr = 0.001
         self.batch_size = 2 ** 8
         self. weight_decay = 1  # optimizer
         # model hyperparmeters:
+        self.e2_idx = 3
         self.ker_size = 5
         self.stride = 1
         self.dial = 1

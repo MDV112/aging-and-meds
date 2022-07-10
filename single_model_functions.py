@@ -96,7 +96,7 @@ def split_dataset(dataset: object, val_size: float = 0.2, seed: int = 42, proper
     return x_train, y_train, x_val, y_val
 
 
-def scale_dataset(*args, input_scaler=None, mode=0, should_scale: bool = False ) -> tuple:
+def scale_dataset(*args, input_scaler=None, mode=0, should_scale: bool = False) -> tuple:
     """
     Scaling the data properly according to the training set. If split is made, then scaling is performed for training
     set and then validation and testing are scaled by the same fitted scaler. This means that we call the function twice;
@@ -158,9 +158,9 @@ def train_epochs(model: object, p: object, calc_metric: bool, *args):
     """
     for epoch in range(1, p.num_epochs + 1):
         epoch_time = time.time()
-        training_loss = train_batches(model, p, calc_metric, *args)
+        training_loss = train_batches(model, p, epoch, *args, calc_metric=False)
         training_loss /= len(args[1])  # len of trainloader
-        validation_loss = eval_model(model, p, calc_metric=calc_metric, *args)
+        validation_loss = eval_model(model, p, epoch, *args, calc_metric=False)
         if len(args) > 3:  # meaning validation exists.
             validation_loss /= len(args[3])  # len of valloader
         log = "Epoch: {} | Training loss: {:.4f}  | Validation loss: {:.4f}   ".format(epoch, training_loss, validation_loss)
@@ -169,10 +169,11 @@ def train_epochs(model: object, p: object, calc_metric: bool, *args):
         print(log)
 
 
-def train_batches(model, p, calc_metric, *args) -> float:
+def train_batches(model, p, epoch, *args, calc_metric=False) -> float:
     """
     This function runs over the mini-batches in a single complete epoch using cosine loss.
     :param: inputs from train_model function.
+    :param epoch: current epoch to check if pretrainng is over
     :return: accumalting loss over the epoch.
     """
     if len(args) == 3:  # validation does not exist
@@ -190,10 +191,16 @@ def train_batches(model, p, calc_metric, *args) -> float:
         inputs2 = inputs2.to(p.device)
         labels2 = labels2.to(p.device)
         # forward
-        outputs1, aug_loss1 = model(inputs1, flag_aug=True)  # forward pass
-        outputs2, aug_loss2 = model(inputs2, flag_aug=True)
-        # backward + optimize
-        loss = aug_loss1 + aug_loss2 + cosine_loss(outputs1, outputs2, labels1, labels2, flag=p.flag, lmbda=p.lmbda, b=p.b)
+        if epoch > p.pretraining_epoch:
+            outputs1, aug_loss1 = model(inputs1, flag_aug=True)  # forward pass
+            outputs2, aug_loss2 = model(inputs2, flag_aug=True)
+            # backward + optimize
+            loss = p.reg_aug*(aug_loss1 + aug_loss2) + cosine_loss(outputs1, outputs2, labels1, labels2, flag=p.flag, lmbda=p.lmbda, b=p.b)
+        else:
+            outputs1 = model(inputs1)  # forward pass
+            outputs2 = model(inputs2)
+            # backward + optimize
+            loss = cosine_loss(outputs1, outputs2, labels1, labels2, flag=p.flag, lmbda=p.lmbda, b=p.b)
         optimizer.zero_grad()
         loss.backward(retain_graph=True)  # backpropagation
         optimizer.step()
@@ -205,7 +212,7 @@ def train_batches(model, p, calc_metric, *args) -> float:
     return running_loss
 
 
-def eval_model(model, p, *args, calc_metric=0):
+def eval_model(model, p, epoch, *args, calc_metric=0):
     """
     This function evaluates the current learned model on validation set in every epoch or on testing set in a "single
     epoch".
@@ -219,11 +226,11 @@ def eval_model(model, p, *args, calc_metric=0):
         return eval_loss
     else:
         model.eval()
-        eval_loss = eval_batches(model, p, calc_metric, *args)  # without "*" it would have built a tuple in a tuple
+        eval_loss = eval_batches(model, p, epoch, *args, calc_metric=calc_metric)  # without "*" it would have built a tuple in a tuple
         return eval_loss
 
 
-def eval_batches(model, p, calc_metric, *args) -> float:
+def eval_batches(model, p,  epoch, *args, calc_metric=False) -> float:
     """
     This function runs evaluation over batches.
     :param: see eval_model
@@ -244,12 +251,18 @@ def eval_batches(model, p, calc_metric, *args) -> float:
             labels1 = labels1.to(p.device)
             inputs2 = inputs2.to(p.device)
             labels2 = labels2.to(p.device)
+
+            if epoch > p.pretraining_epoch:
+                outputs1, aug_loss1 = model(inputs1, flag_aug=True)  # forward pass
+                outputs2, aug_loss2 = model(inputs2, flag_aug=True)
+                # backward + optimize
+                loss = p.reg_aug*(aug_loss1 + aug_loss2) + cosine_loss(outputs1, outputs2, labels1, labels2, flag=p.flag, lmbda=p.lmbda, b=p.b)
+            else:
+                outputs1 = model(inputs1)  # forward pass
+                outputs2 = model(inputs2)
+                # backward + optimize
+                loss = cosine_loss(outputs1, outputs2, labels1, labels2, flag=p.flag, lmbda=p.lmbda, b=p.b)
             # forward
-            outputs1 = model(inputs1)  # forward pass
-            outputs2, aug_loss = model(inputs2, flag_aug=True)
-            # aug_loss = torch.tensor(aug_loss).unsqueeze(0)
-            # calculate loss
-            loss = aug_loss + cosine_loss(outputs1, outputs2, labels1, labels2, flag=p.flag, lmbda=p.lmbda, b=p.b)
             running_loss += loss.data.item()
             if calc_metric:
                 raise NotImplementedError
