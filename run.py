@@ -9,19 +9,13 @@ import numpy as np
 import pandas as pd
 from sklearn.preprocessing import StandardScaler
 from sklearn.preprocessing import MinMaxScaler
-import tensorflow as tf
+
 from sklearn.metrics import balanced_accuracy_score, f1_score, precision_score, recall_score, roc_auc_score, accuracy_score
-from tensorflow import keras
-from tensorflow.keras.models import Sequential, load_model
-from tensorflow.keras.layers import Dense, Dropout, Activation, Conv1D, MaxPool1D, Flatten, BatchNormalization
-from tensorflow.keras import utils
-from tensorflow.keras.wrappers.scikit_learn import KerasClassifier
-import os
-from tensorflow.keras.optimizers import SGD
+
 import sys
 # todo: use Pipeline. Add here plots such as confusion matrix and radar plots.
 
-tf.compat.v1.enable_eager_execution()
+
 
 
 class Run:

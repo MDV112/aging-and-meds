@@ -2,7 +2,7 @@ from data_loader import Dataloader
 # from run import Run
 from models import Models
 from run import *
-import tensorflow as tf
+# import tensorflow as tf
 from sklearn.metrics import f1_score, make_scorer
 from data_loader import TorchDataset
 # from deep import AE
@@ -19,10 +19,10 @@ import pickle
 
 
 if __name__ == '__main__':
-    with open('y_label.pkl', 'rb') as f:
-        yy = pickle.load(f)
-    with open('x_y.pkl', 'rb') as f:
-        tr_x_c, tr_x_a, tr_y_c, tr_y_a, ts_x_c, ts_x_a, ts_y_c, ts_y_a, max_age = pickle.load(f)
+    # with open('y_label.pkl', 'rb') as f:
+    #     yy = pickle.load(f)
+    # with open('x_y.pkl', 'rb') as f:
+    #     tr_x_c, tr_x_a, tr_y_c, tr_y_a, ts_x_c, ts_x_a, ts_y_c, ts_y_a, max_age = pickle.load(f)
     red_dim = False  # apply dimensionality reduction
     vis = False
     device = torch.device("cuda:3" if torch.cuda.is_available() else "cpu")
@@ -30,7 +30,7 @@ if __name__ == '__main__':
     data.load()
     data.split()
     drop_indices = [0, 1, 4, 9, 10, 12, 13, 15, 17]
-    label_dict = {'k_id': 10, 'med': [0], 'age': [6], 'win_num': 10, 'seed': 42}
+    label_dict = {'k_id': 'all', 'med': 'all', 'age': 'all', 'win_num': 'all', 'seed': 42}
     dim_red_dict = dict(perplexity=10.5, init='pca')
     n_components = 2
     n_nets = 1
@@ -66,6 +66,8 @@ if __name__ == '__main__':
             dim_red = DimRed(data, n_components=n_components, plot=vis)
             # dim_red_dict = dict(kernel='rbf', gamma=0.0005)
             obj_vis = dim_red.apply(**dim_red_dict)
+        with open('rr_data.pkl', 'wb') as f:
+            pickle.dump(data, f)
         mod = DeepModels(data, 1, device)
         mod.choose_model('CNN', label='id', mode='val', **dict(num_chann=[20, 30, 50, 20], ker_size=10, drop_out=0.2, num_hidden=[40, 30, 10]))
         mod.set_model(lr=1e-3, optimizer=torch.optim.SGD, **dict(momentum=0.9))

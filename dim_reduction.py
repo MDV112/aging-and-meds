@@ -3,7 +3,6 @@ from data_loader import Dataloader
 from models import Models
 import json
 from run import *
-import tensorflow as tf
 from sklearn.metrics import f1_score, make_scorer
 from data_loader import TorchDataset
 # from deep import AE

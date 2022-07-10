@@ -2,7 +2,6 @@ from data_loader import Dataloader
 # from run import Run
 from models import Models
 from run import *
-import tensorflow as tf
 from sklearn.metrics import f1_score, make_scorer
 from data_loader import TorchDataset
 # from deep import AE
@@ -46,7 +45,7 @@ if __name__ == '__main__':
     data_loader.load()
     data_loader.split()
     data_loader.clean()
-    label_dict = {'k_id': 'all', 'med': [0], 'age': [6]}
+    label_dict = {'k_id': 'all', 'med': 'all', 'age': 'all'}
 
     data_loader.choose_specific_xy_rr(label_dict=label_dict)
     ds_train = TorchDataset(data_loader, 'train')

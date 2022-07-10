@@ -5,7 +5,6 @@ from test_general_dataset import MLP
 from models import Models
 from torch.utils.data import Dataset
 from run import *
-import tensorflow as tf
 from sklearn.metrics import f1_score, make_scorer
 from data_loader import TorchDataset
 # from deep import AE

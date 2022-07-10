@@ -2,15 +2,15 @@ from sklearn.linear_model import LogisticRegression
 from sklearn.svm import SVC
 from sklearn.ensemble import RandomForestClassifier
 import xgboost as xgb
-import tensorflow as tf
-from tensorflow.keras import layers, losses
-from tensorflow.keras.models import Model
-from tensorflow import keras
-from tensorflow.keras.models import Sequential, load_model
-from tensorflow.keras.layers import Dense, Dropout, Activation, Conv1D, MaxPool1D, Flatten, BatchNormalization
-from tensorflow.keras import utils
-from tensorflow.keras.wrappers.scikit_learn import KerasClassifier
-from tensorflow.keras.optimizers import SGD
+# import tensorflow as tf
+# from tensorflow.keras import layers, losses
+# from tensorflow.keras.models import Model
+# from tensorflow import keras
+# from tensorflow.keras.models import Sequential, load_model
+# from tensorflow.keras.layers import Dense, Dropout, Activation, Conv1D, MaxPool1D, Flatten, BatchNormalization
+# from tensorflow.keras import utils
+# from tensorflow.keras.wrappers.scikit_learn import KerasClassifier
+# from tensorflow.keras.optimizers import SGD
 import os
 import numpy as np
 import torch
@@ -81,24 +81,24 @@ class Models:
     #     return model
 
 
-class AE(Model):
-
-    def __init__(self, nbeats=250):
-        super(AE, self).__init__()
-        self.encoder = tf.keras.Sequential([
-            layers.Dense(32, activation="relu"),
-            layers.Dense(16, activation="relu"),
-            layers.Dense(8, activation="relu")])
-
-        self.decoder = tf.keras.Sequential([
-            layers.Dense(16, activation="relu"),
-            layers.Dense(32, activation="relu"),
-            layers.Dense(nbeats, activation="sigmoid")])
-
-    def call(self, x):
-        encoded = self.encoder(x)
-        decoded = self.decoder(encoded)
-        return decoded
+# class AE(Model):
+#
+#     def __init__(self, nbeats=250):
+#         super(AE, self).__init__()
+#         self.encoder = tf.keras.Sequential([
+#             layers.Dense(32, activation="relu"),
+#             layers.Dense(16, activation="relu"),
+#             layers.Dense(8, activation="relu")])
+#
+#         self.decoder = tf.keras.Sequential([
+#             layers.Dense(16, activation="relu"),
+#             layers.Dense(32, activation="relu"),
+#             layers.Dense(nbeats, activation="sigmoid")])
+#
+#     def call(self, x):
+#         encoded = self.encoder(x)
+#         decoded = self.decoder(encoded)
+#         return decoded
 
 # autoencoder = AE()
 

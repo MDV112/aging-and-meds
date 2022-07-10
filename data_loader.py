@@ -11,6 +11,7 @@ from sklearn.preprocessing import StandardScaler
 from sklearn.preprocessing import MinMaxScaler
 from sklearn.impute import SimpleImputer
 import random
+import pickle
 
 
 class Dataloader:
@@ -83,8 +84,8 @@ class Dataloader:
             ds_keys = []
             f.visit(lambda key: ds_keys.append(key) if type(f[key]) is h5py._hl.dataset.Dataset else None)
             matching = [s for s in ds_keys if str(self.dataset_name) in s]
-            self.ds_input = f[matching[0]].value
-            ds_output = f[matching[1]].value.astype(int)
+            self.ds_input = f[matching[0]][()]
+            ds_output = f[matching[1]][()].astype(int)
             self.ds_output = pd.DataFrame(ds_output.T, columns=['id', 'age', 'med', 'win_num'])
             self.loaded = True
             #todo: check why dropping 726 in the age of 27 does not work in main
