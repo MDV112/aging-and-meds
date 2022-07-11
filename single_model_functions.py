@@ -199,6 +199,7 @@ def train_batches(model, p, epoch, *args) -> float:
             outputs2, aug_loss2 = model(inputs2, flag_aug=True)
             # backward + optimize
             loss = p.reg_aug*(aug_loss1 + aug_loss2) + cosine_loss(outputs1, outputs2, labels1, labels2, flag=p.flag, lmbda=p.lmbda, b=p.b)
+
         else:
             outputs1 = model(inputs1)  # forward pass
             outputs2 = model(inputs2)

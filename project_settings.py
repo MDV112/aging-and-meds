@@ -5,7 +5,7 @@ import torch
 class ProSet:
     def __init__(self):
         self.entity = "morandv_team"  # wandb init
-        self.med_mode = 'c'  # control or abk ('a')
+        self.med_mode = 'a'  # control or abk ('a')
         # data paths:
         # self.train_path = '/home/smorandv/DynamicalSystems/DynamicalSystems/running_scripts/single_exp/x_y.pkl'
         self.train_path = '/home/smorandv/ac8_and_aging/rr_data.pkl'
@@ -16,16 +16,16 @@ class ProSet:
         self.val_size = 0.2
         self.seed = 42
         # cosine loss hyperparameters:
-        self.b = 0  # -0.8
+        self.b = -0.8  # -0.8
         self.lmbda = 1  # 1000
         self.flag = 0
         self.phi = np.pi
         # training hyperparameters:
         self.num_epochs = 100
-        self.pretraining_epoch = 10
+        self.pretraining_epoch = 3
         self.reg_aug = 10
-        self.lr = 0.001
-        self.batch_size = 2 ** 8
+        self.lr = 0.00001
+        self.batch_size = 2 ** 6
         self. weight_decay = 1  # optimizer
         # model hyperparmeters:
         self.e2_idx = 2
