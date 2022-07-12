@@ -30,7 +30,7 @@ if __name__ == '__main__':
     data.load()
     data.split()
     drop_indices = [0, 1, 4, 9, 10, 12, 13, 15, 17]
-    label_dict = {'k_id': 'all', 'med': 'all', 'age': [6], 'win_num': 'all', 'seed': 42}
+    label_dict = {'k_id': 'all', 'med': 'all', 'age': [6], 'win_num': 20, 'seed': 42}
     dim_red_dict = dict(perplexity=10.5, init='pca')
     n_components = 2
     n_nets = 1
@@ -69,7 +69,8 @@ if __name__ == '__main__':
         with open('rr_data.pkl', 'wb') as f:
             pickle.dump(data, f)
         mod = DeepModels(data, 1, device)
-        mod.choose_model('CNN', label='id', mode='val', **dict(num_chann=[20, 30, 50, 20], ker_size=10, drop_out=0.2, num_hidden=[40, 30, 10]))
+        mod.choose_model('CNN', label='id', mode='val', **dict(num_chann=[20, 30, 50, 20], ker_size=10, drop_out=0.2,
+                                                               num_hidden=[40, 30, 10]))
         mod.set_model(lr=1e-3, optimizer=torch.optim.SGD, **dict(momentum=0.9))
         loss = nn.CrossEntropyLoss()
         mod.train(loss, epochs=300)

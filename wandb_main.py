@@ -21,6 +21,7 @@ if __name__ == '__main__':
     # wandb.login()
     # wandb.init('test', entity=p.entity)
     # config = dict(n_epochs=p.num_epochs, batch_size=p.batch_size)
+    print('Med mode is : {}'.format(p.med_mode))
 
     tr_dataset_1 = load_datasets(p.train_path, feat2drop=['Age'], med_mode=p.med_mode)
     x_tr, y_tr, x_val, y_val = split_dataset(tr_dataset_1, proper=p.proper)

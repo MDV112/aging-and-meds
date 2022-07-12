@@ -157,7 +157,8 @@ def cosine_loss(out1, out2, lbl1, lbl2, flag=0, lmbda=1, b=0):
         batch_loss = (1-2*y)*res
         return batch_loss.mean()
     else:
-        batch_loss = -lmbda*y*(b + res) + (1 - y)*res
+        batch_loss = -y*(b + res) + (1/lmbda)*(1 - y)*res  # dividing second term by lmbda is equivalent to multiplying
+        # the first term and divde the whole term in order to get the loss in the original range
     loss = batch_loss.mean()
     if flag:
         return res, y
@@ -951,6 +952,8 @@ class Advrtset(nn.Module):
         I_Z_A = 0.0
         eps = 10.0 ** -6
         tau = 10.0 ** -4
+        if n >= Z.shape[0]:
+            n = Z.shape[0] - 1
         for j, pos_pair in enumerate(zip(Z, phi_A), 0):
             z, phi_A_pos = pos_pair
             vec_neg = vec_idx[~np.isin(vec_idx, j)]
@@ -960,7 +963,8 @@ class Advrtset(nn.Module):
             A = torch.cat((phi_A_pos.flatten().unsqueeze(0), v_bar.view(v_bar.size(0), -1)))
             sim = torch.exp(tau*torch.matmul(A, z.flatten()))
             L = sim[0]/(eps + torch.sum(sim))
-            I_Z_A -= L.item()  # NOTICE THE MINUS
+            if not(torch.isnan(L)):  # can happen if tau is not enough to lower the exp in sim
+                I_Z_A -= L.item()  # NOTICE THE MINUS
         mean_I_Z_A = I_Z_A/len(Z)
         return mean_I_Z_A
 
