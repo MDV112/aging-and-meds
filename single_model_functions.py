@@ -221,7 +221,7 @@ def train_batches(model, p, epoch, *args) -> float:
         # forward
         if epoch > p.pretraining_epoch:
             outputs1, aug_loss1 = model(inputs1, flag_aug=True)  # forward pass
-            outputs2, aug_loss2 = model(inputs2, flag_aug=True)
+            outputs2, aug_loss2 = model(inputs2, flag_aug=True, y=labels1[:, 1])
             # backward + optimize
             loss = p.reg_aug*(aug_loss1 + aug_loss2) + cosine_loss(outputs1, outputs2, labels1, labels2, flag=p.flag,
                                                                    lmbda=p.lmbda, b=p.b)
@@ -246,6 +246,14 @@ def train_batches(model, p, epoch, *args) -> float:
 
 
 def calc_metric(scores_list, y_list, epoch, train_mode='Training'):
+    """
+    This function calculates metrics relevant to verification task such as FAR, FRR, ERR, confusion matrix etc.
+    :param scores_list: list of tensors (mini-batches) that are probability-like.
+    :param y_list: list of tensors (mini-batches) where every example can have the value of 0 (not verified) or 1 (verified).
+    :param epoch: current epoch number.
+    :param train_mode: Training/Testing for title.
+    :return: ERR + plotting every 10 epochs and priniting confusion matrix every epoch.
+    """
     scores = torch.cat(scores_list)
     y = torch.cat(y_list)
     fpr, tpr, thresholds = metrics.roc_curve(y.detach().cpu(), scores.detach().cpu())

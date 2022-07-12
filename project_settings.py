@@ -23,7 +23,7 @@ class ProSet:
         # training hyperparameters:
         self.num_epochs = 100
         self.pretraining_epoch = 5
-        self.reg_aug = 10
+        self.reg_aug = 1
         self.lr = 0.00001
         self.batch_size = 2 ** 4
         self. weight_decay = 1  # optimizer
