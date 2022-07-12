@@ -134,8 +134,8 @@ def cosine_loss(out1, out2, lbl1, lbl2, flag=0, lmbda=1, b=0):
 
     :param out1: representation in latent space of input1
     :param out2: representation in latent space of input2
-    :param lbl1: id of input1
-    :param lbl2: id of input2
+    :param lbl1: The first column is the id of input1 and the second is the age
+    :param lbl2: The first column is the id of input2 and the second is the age
     :param flag: 0: return only the loss, 1: return cosine distance and equality label
     :param lmbda: controls FAR. The larger lmbda is, the smaller the FAR
     :param b: scalar in [-1,1]. Controls the threshold for deciding if two inputs are the same or not. By default, if out1 and out2 are
@@ -149,7 +149,7 @@ def cosine_loss(out1, out2, lbl1, lbl2, flag=0, lmbda=1, b=0):
         cos = nn.CosineSimilarity()
     res = cos(out1, out2)
     res = res.t()
-    y = 1*(lbl1 == lbl2)
+    y = 1*(lbl1[:, 0] == lbl2[:, 0])
     # batch_loss = lmbda1*(1 - y) * res + lmbda2*y*(1 - res)
     #
     # batch_loss = (1-y*(1+lmbda))*res
@@ -959,7 +959,7 @@ class Advrtset(nn.Module):
             vec_neg = vec_idx[~np.isin(vec_idx, j)]
             perm = torch.randperm(len(vec_neg))
             v_bar = phi_A[perm[:n]]
-            # set v_bar as a mtrix with n rows and flattened data
+            # set v_bar as a matrix with n rows and flattened data
             A = torch.cat((phi_A_pos.flatten().unsqueeze(0), v_bar.view(v_bar.size(0), -1)))
             sim = torch.exp(tau*torch.matmul(A, z.flatten()))
             L = sim[0]/(eps + torch.sum(sim))
@@ -967,6 +967,8 @@ class Advrtset(nn.Module):
                 I_Z_A -= L.item()  # NOTICE THE MINUS
         mean_I_Z_A = I_Z_A/len(Z)
         return mean_I_Z_A
+
+
 
 
 
