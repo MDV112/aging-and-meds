@@ -36,10 +36,14 @@ def load_datasets(full_pickle_path: str, med_mode: str = 'c', mode: int = 0, fea
             e = pickle.load(f)
             if train_mode:
                 x = e.x_train_specific
+                # x = x - x.mean(axis=0)
+                # x = x - x.min()
                 y = e.y_train_specific
                 print('Ages used in training set are {}'. format(np.unique(y['age'])))
             else:
                 x = e.x_test_specific
+                # x = x - x.mean(axis=0)
+                # x = x - x.min(axis=0)
                 y = e.y_test_specific
                 print('Ages used in training set are {}'. format(np.unique(y['age'])))
         x_c, x_a = x[:, y['med'] == 0], x[:, y['med'] == 1]
@@ -87,7 +91,7 @@ def split_dataset(dataset: object, val_size: float = 0.2, seed: int = 42, proper
     """
     if proper:  # meaning splitting train and val into different mice or just different time windows
         np.random.seed(seed)
-        tags = np.unique(dataset.y)
+        tags = np.unique(dataset.y[:,0])
         val_tags = np.random.choice(tags, int(np.floor(val_size*len(tags))), replace=False)
         train_tags = np.setdiff1d(tags, val_tags)
         train_mask = np.isin(dataset.y[:, 0], train_tags)
@@ -97,7 +101,7 @@ def split_dataset(dataset: object, val_size: float = 0.2, seed: int = 42, proper
         x_val = dataset.x[val_mask, :]
         y_val = dataset.y[val_mask, :]
     else:  #todo: check if split is done correctly here
-        x_train, x_val, y_train, y_val = train_test_split(dataset.x, dataset.y, test_size=val_size)
+        x_train, x_val, y_train, y_val = train_test_split(dataset.x, dataset.y[:,0], test_size=val_size)
     return x_train, y_train, x_val, y_val
 
 
@@ -240,8 +244,10 @@ def train_batches(model, p, epoch, *args) -> float:
         res_temp, y_temp = cosine_loss(outputs1, outputs2, labels1, labels2, flag=1, lmbda=p.lmbda, b=p.b)
         scores_list.append(0.5 * (res_temp + 1))  # making the cosine similarity as probability
         y_list.append(y_temp)
+    optimizer.zero_grad()
     if p.calc_metric:
-        err = calc_metric(scores_list, y_list, epoch)
+        err, conf, y = calc_metric(scores_list, y_list, epoch)
+        error_analysis(dataloader1, dataloader2, conf, y)
         return running_loss, err
     return running_loss
 
@@ -275,13 +281,21 @@ def calc_metric(scores_list, y_list, epoch, train_mode='Training'):
     conf_mat[1, 0] += torch.sum(1*(conf[res == 0] == 0))
     conf_mat[1, 1] += torch.sum(1*(conf[res == 1] == 1))
     print(conf_mat)
+    print(conf_mat.trace()/conf_mat.sum())
     if np.mod(epoch, 10) == 0:
         plt.plot(tr, far, tr, frr)
         plt.legend(['FAR', 'FRR'])
         # plt.xlim((tr.min(), 1.2))
         plt.title('{} mode: ERR = {:.2f}, epoch = {}'.format(train_mode, err, epoch))
         plt.show()
-    return err
+    return err, conf, y
+
+def error_analysis(dataloader1, dataloader2, conf, y):
+    # wrong_pairs = (dataloader1.dataset[conf == 0], dataloader2.dataset[conf == 0])
+    # misrejected = (wrong_pairs[0][y == 1], wrong_pairs[1][y == 1])  # meaning they are the same but predicted that they are not
+    # misaccepted = (wrong_pairs[0][y == 0], wrong_pairs[1][y == 0])
+
+    pass
 
 
 def eval_model(model, p, epoch, *args):
@@ -343,7 +357,7 @@ def eval_batches(model, p,  epoch, *args) -> float:
             scores_list.append(0.5 * (res_temp + 1))  # making the cosine similarity as probability
             y_list.append(y_temp)
         if p.calc_metric:
-            err = calc_metric(scores_list, y_list, epoch, train_mode='Testing')
+            err, conf, y = calc_metric(scores_list, y_list, epoch, train_mode='Testing')
             return running_loss, err
     return running_loss
 

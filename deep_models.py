@@ -856,7 +856,7 @@ class Advrtset(nn.Module):
 
         self.num_hidden = num_hidden
         self.conv = nn.ModuleList()
-        self.soft_max = nn.Softmax(dim=1)
+        # self.soft_max = nn.Softmax(dim=1)
         self.p = p
 
         self.conv.append(nn.Sequential(
@@ -894,6 +894,9 @@ class Advrtset(nn.Module):
                 # nn.ReLU(),
                 # nn.Dropout(idx + idx_lin + 1)
             ))
+        del self.conv[-1][2]  # last Relu
+        del self.conv[-1][1]  # last batchNorm
+        a=1
 
     def forward(self, x, flag_aug=False, y=None):
         if not(flag_aug):
