@@ -998,7 +998,7 @@ class Advrtset(nn.Module):
         :return: support loss as in the paper.
         """
         B_Z_D = 0.0
-        if domain_tag is (not None or not(np.all(np.nan))):
+        if (domain_tag is not None) or (torch.all(torch.isnan(domain_tag))):
             eps = 10.0 ** -6
             tau = 10.0 ** -4
             for j, z_domain_pair in enumerate(zip(Z, domain_tag), 0):

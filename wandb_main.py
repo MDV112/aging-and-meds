@@ -39,14 +39,14 @@ if __name__ == '__main__':
     optimizer = torch.optim.SGD(model.parameters(), lr=p.lr)
     ############## TRAINING SET ##########################
     trainloader1 = torch.utils.data.DataLoader(
-        tr_dataset_1, batch_size=p.batch_size, shuffle=False, num_workers=0, drop_last=False)
+        tr_dataset_1, batch_size=p.batch_size, shuffle=False, num_workers=0, drop_last=True)
     trainloader2 = torch.utils.data.DataLoader(
-        tr_dataset_2, batch_size=p.batch_size, shuffle=True, num_workers=0, drop_last=False)
+        tr_dataset_2, batch_size=p.batch_size, shuffle=False, num_workers=0, drop_last=True)
     ############## VALIDATION SET ###########################
     valloader1 = torch.utils.data.DataLoader(
-        val_dataset_1, batch_size=p.batch_size, shuffle=False, num_workers=0, drop_last=False)
+        val_dataset_1, batch_size=p.batch_size, shuffle=False, num_workers=0, drop_last=True)
     valloader2 = torch.utils.data.DataLoader(
-        val_dataset_2, batch_size=p.batch_size, shuffle=True, num_workers=0, drop_last=False)
+        val_dataset_2, batch_size=p.batch_size, shuffle=False, num_workers=0, drop_last=True)
 
     #IN VALIDATION SET, IT SHOULD BE VAL_DATASET. ENLARGE
     # NUM OF MICE. CHANGE SHUFFLE AS NEEDED FOR DOMAIN. CHECK WHY VAL AND TRAIN LOSS ARE NOT THE SAME.

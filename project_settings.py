@@ -16,15 +16,16 @@ class ProSet:
         self.val_size = 0.25
         self.seed = 42
         # cosine loss hyperparameters:
-        self.b = 0  # -0.8
+        self.b = -0.5  # -0.8
         self.lmbda = 1  # 1000
         self.flag = 0
         self.phi = np.pi
         # training hyperparameters:
-        self.num_epochs = 100
-        self.pretraining_epoch = 105
-        self.reg_aug = 1
-        self.lr = 0.00001
+        self.num_epochs = 200
+        self.pretraining_epoch = 30
+        self.reg_aug = 1/50
+        self.reg_supp = 1/20
+        self.lr = 0.0000001  # 0.000001
         self.batch_size = 2 ** 4
         self. weight_decay = 1  # optimizer
         # model hyperparmeters:
