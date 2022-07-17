@@ -167,11 +167,13 @@ def train_epochs(model: object, p: object, *args):
     """
     training_err_vector = np.zeros(p.num_epochs)
     val_err_vector = np.zeros(p.num_epochs)
+    train_acc_vector = np.zeros(p.num_epochs)
+    val_acc_vector = np.zeros(p.num_epochs)
     for epoch in range(1, p.num_epochs + 1):
         epoch_time = time.time()
         if p.calc_metric:
-            training_loss, training_err_vector[epoch - 1] = train_batches(model, p, epoch, *args)
-            validation_loss, val_err_vector[epoch - 1] = eval_model(model, p, epoch, *args)
+            training_loss, training_err_vector[epoch - 1], train_acc_vector[epoch - 1] = train_batches(model, p, epoch, *args)
+            validation_loss, val_err_vector[epoch - 1], val_acc_vector[epoch - 1] = eval_model(model, p, epoch, *args)
         else:
             training_loss = train_batches(model, p, epoch, *args)
             validation_loss = eval_model(model, p, epoch, *args)
@@ -189,12 +191,20 @@ def train_epochs(model: object, p: object, *args):
         print(log)
     if p.calc_metric:
         idx_val_min = np.argmin(val_err_vector)
-        print('Minimal validation ERR was {:.3f} in epoch number {}. Training ERR at the same epoch was: {:.3f}'
-              .format(np.min(val_err_vector), 1 + idx_val_min, training_err_vector[idx_val_min]))
-        plt.plot(np.arange(1, p.num_epochs + 1), training_err_vector)
-        plt.plot(np.arange(1, p.num_epochs + 1), val_err_vector)
-        plt.legend(['Train, Test'])
-        plt.ylabel('ERR')
+        idx_val_max = np.argmax(val_acc_vector)
+        print('Minimal validation ERR was {:.2f}% in epoch number {}. Training ERR at the same epoch was: {:.2f}%'
+              .format(100*np.min(val_err_vector), 1 + idx_val_min, 100*training_err_vector[idx_val_min]))
+        plt.plot(np.arange(1, p.num_epochs + 1), 100*training_err_vector, np.arange(1, p.num_epochs + 1), 100*val_err_vector)
+        plt.legend(['ERR Train', 'ERR Test'])
+        plt.ylabel('ERR [%]')
+        plt.xlabel('epochs')
+        plt.show()
+        print('Maximal validation accuracy was {:.2f}% in epoch number {}. Training accuracy at the same epoch was: {:.2f}%'
+              .format(100 * np.max(val_acc_vector), 1 + idx_val_min, 100 * train_acc_vector[idx_val_max]))
+        plt.plot(np.arange(1, p.num_epochs + 1), 100 * train_acc_vector, np.arange(1, p.num_epochs + 1),
+                 100 * val_acc_vector)
+        plt.legend(['ACC Train', 'ACC Test'])
+        plt.ylabel('ACC [%]')
         plt.xlabel('epochs')
         plt.show()
     return
@@ -246,9 +256,9 @@ def train_batches(model, p, epoch, *args) -> float:
         y_list.append(y_temp)
     optimizer.zero_grad()
     if p.calc_metric:
-        err, conf, y = calc_metric(scores_list, y_list, epoch)
+        err, best_acc, conf, y = calc_metric(scores_list, y_list, epoch)
         error_analysis(dataloader1, dataloader2, conf, y)
-        return running_loss, err
+        return running_loss, err, best_acc
     return running_loss
 
 
@@ -263,32 +273,56 @@ def calc_metric(scores_list, y_list, epoch, train_mode='Training'):
     """
     scores = torch.cat(scores_list)
     y = torch.cat(y_list)
-    fpr, tpr, thresholds = metrics.roc_curve(y.detach().cpu(), scores.detach().cpu())
-    # https://stats.stackexchange.com/questions/272962/are-far-and-frr-the-same-as-fpr-and-fnr-respectively
-    far, frr, = fpr, 1 - tpr  # since frr = fnr
-    # thresholds -= 1
-    tr = np.flip(thresholds)
+
+    # fpr, tpr, thresholds = metrics.roc_curve(y.detach().cpu(), scores.detach().cpu())
+    # # https://stats.stackexchange.com/questions/272962/are-far-and-frr-the-same-as-fpr-and-fnr-respectively
+    # far, frr, = fpr, 1 - tpr  # since frr = fnr
+    # # thresholds -= 1
+    # tr = np.flip(thresholds)
+    # err_idx = np.argmin(np.abs(frr - far))
+    # err = 0.5 * (frr[err_idx] + far[err_idx])
+    # optimal_thresh = tr[err_idx]
+    # res = torch.clone(scores)
+    # res[scores >= optimal_thresh] = 1
+    # res[scores < optimal_thresh] = 0
+    #
+    res_orig = 2 * scores - 1
+    res_orig = res_orig.cpu().detach()
+    y = y.cpu().detach()
+    thresh = torch.linspace(scores.min().item()-1, scores.max().item()+1, 30)
+    far = torch.zeros_like(thresh)  # fpr
+    frr = torch.zeros_like(thresh)  # 1 - tpr
+    acc = torch.zeros_like(thresh)
+    conf_mat_tensor = torch.zeros((thresh.shape[0], 2, 2))
+    for idx, trh in enumerate(thresh):
+        res2 = torch.clone(res_orig)
+        conf_mat = torch.zeros((2, 2))
+        res2[res_orig >= trh] = 1
+        res2[res_orig < trh] = 0
+        conf = (res2 == y)
+        conf_mat[0, 0] += torch.sum(1*(conf[res2 == 0] == 1))
+        conf_mat[0, 1] += torch.sum(1*(conf[res2 == 1] == 0))
+        conf_mat[1, 0] += torch.sum(1*(conf[res2 == 0] == 0))
+        conf_mat[1, 1] += torch.sum(1*(conf[res2 == 1] == 1))
+        far[idx] = conf_mat[0, 1]/conf_mat.sum(axis=1)[0]
+        frr[idx] = 1 - (conf_mat[1, 1]/conf_mat.sum(axis=1)[1])
+        acc[idx] = conf_mat.trace()/conf_mat.sum()
+        conf_mat_tensor[idx, :, :] = conf_mat
     err_idx = np.argmin(np.abs(frr - far))
     err = 0.5 * (frr[err_idx] + far[err_idx])
-    optimal_thresh = tr[err_idx]
-    res = scores
-    res[scores >= optimal_thresh] = 1
-    res[scores < optimal_thresh] = 0
-    conf_mat = np.zeros((2, 2))
-    conf = (res == y)
-    conf_mat[0, 0] += torch.sum(1*(conf[res == 0] == 1))
-    conf_mat[0, 1] += torch.sum(1*(conf[res == 1] == 0))
-    conf_mat[1, 0] += torch.sum(1*(conf[res == 0] == 0))
-    conf_mat[1, 1] += torch.sum(1*(conf[res == 1] == 1))
-    print(conf_mat)
-    print(conf_mat.trace()/conf_mat.sum())
+    acc_idx = torch.argmax(acc)
+    best_acc = acc[acc_idx]
+    print('With threshold of {:.2f} we got minimal ERR of {:.2f} and accuracy of  {:.2f}'.format(thresh[err_idx], err,
+                                                                                               acc[err_idx]))
+    print('With threshold of {:.2f} we got maximal accuracy of {:.2f} and ERR of  {:.2f}'.format(thresh[acc_idx],
+                                                                        best_acc, 0.5 * (frr[acc_idx] + far[acc_idx])))
+
     if np.mod(epoch, 10) == 0:
-        plt.plot(tr, far, tr, frr)
-        plt.legend(['FAR', 'FRR'])
-        # plt.xlim((tr.min(), 1.2))
-        plt.title('{} mode: ERR = {:.2f}, epoch = {}'.format(train_mode, err, epoch))
+        plt.plot(thresh, far, thresh, frr, thresh, acc)
+        plt.legend(['FAR', 'FRR', 'ACC'])
+        plt.title('{} mode: ERR = {:.2f}%, epoch = {}, ACC = {:.2f}%'.format(train_mode, 100*err, epoch, 100*best_acc))
         plt.show()
-    return err, conf, y
+    return err, best_acc, conf.to(scores.device), y.to(scores.device)
 
 def error_analysis(dataloader1, dataloader2, conf, y):
     # wrong_pairs = (dataloader1.dataset[conf == 0], dataloader2.dataset[conf == 0])
@@ -357,8 +391,8 @@ def eval_batches(model, p,  epoch, *args) -> float:
             scores_list.append(0.5 * (res_temp + 1))  # making the cosine similarity as probability
             y_list.append(y_temp)
         if p.calc_metric:
-            err, conf, y = calc_metric(scores_list, y_list, epoch, train_mode='Testing')
-            return running_loss, err
+            err, best_acc, conf, y = calc_metric(scores_list, y_list, epoch, train_mode='Testing')
+            return running_loss, err, best_acc
     return running_loss
 
 

@@ -23,11 +23,11 @@ if __name__ == '__main__':
     print('Med mode is : {}'.format(p.med_mode))
 
     tr_dataset_1 = load_datasets(p.train_path, feat2drop=['Age'], med_mode=p.med_mode)
-    # x_tr, y_tr, x_val, y_val = split_dataset(tr_dataset_1, proper=p.proper, val_size=p.val_size)
-    # tr_dataset_1, val_dataset_1, scaler1 = scale_dataset(x_tr, y_tr, x_val, y_val)
+    x_tr, y_tr, x_val, y_val = split_dataset(tr_dataset_1, proper=p.proper, val_size=p.val_size)
+    tr_dataset_1, val_dataset_1, scaler1 = scale_dataset(x_tr, y_tr, x_val, y_val)
     tr_dataset_2 = load_datasets(p.train_path, feat2drop=['Age'], mode=1, med_mode=p.med_mode)
-    # x_tr, y_tr, x_val, y_val = split_dataset(tr_dataset_2, proper=p.proper, val_size=p.val_size)
-    # tr_dataset_2, val_dataset_2, scaler2 = scale_dataset(x_tr, y_tr, x_val, y_val, mode=1)
+    x_tr, y_tr, x_val, y_val = split_dataset(tr_dataset_2, proper=p.proper, val_size=p.val_size)
+    tr_dataset_2, val_dataset_2, scaler2 = scale_dataset(x_tr, y_tr, x_val, y_val, mode=1)
 
     ##### NOTICE  WHEN TO USE SCALER FOR TESTING. IF WE USE FULL DATASET FOR LEARNING THUS OUTSIDE SCALER IS NOT NEEDED.
 
@@ -39,17 +39,17 @@ if __name__ == '__main__':
     optimizer = torch.optim.SGD(model.parameters(), lr=p.lr)
     ############## TRAINING SET ##########################
     trainloader1 = torch.utils.data.DataLoader(
-        tr_dataset_1, batch_size=p.batch_size, shuffle=False, num_workers=0, drop_last=True)
+        tr_dataset_1, batch_size=p.batch_size, shuffle=False, num_workers=0, drop_last=False)
     trainloader2 = torch.utils.data.DataLoader(
-        tr_dataset_2, batch_size=p.batch_size, shuffle=False, num_workers=0, drop_last=True)
+        tr_dataset_2, batch_size=p.batch_size, shuffle=True, num_workers=0, drop_last=False)
     ############## VALIDATION SET ###########################
     valloader1 = torch.utils.data.DataLoader(
-        tr_dataset_1, batch_size=p.batch_size, shuffle=False, num_workers=0, drop_last=True)
+        val_dataset_1, batch_size=p.batch_size, shuffle=False, num_workers=0, drop_last=False)
     valloader2 = torch.utils.data.DataLoader(
-        tr_dataset_2, batch_size=p.batch_size, shuffle=False, num_workers=0, drop_last=True)
+        val_dataset_2, batch_size=p.batch_size, shuffle=True, num_workers=0, drop_last=False)
 
-    #IN VALIDATION SET, IT SHOULD BE VAL_DATASET. DELETE DROP_LAST=TRUE. UNCIMMENT THE SPLIT AND SCALING. ENLARGE
-    # NUM OF MICE. CHANGE SHUFFLE AS NEEDED FOR DOMAIN. CHECK WHY VAL AND TRAIN LOSS ARE NOT THE SAME
+    #IN VALIDATION SET, IT SHOULD BE VAL_DATASET. ENLARGE
+    # NUM OF MICE. CHANGE SHUFFLE AS NEEDED FOR DOMAIN. CHECK WHY VAL AND TRAIN LOSS ARE NOT THE SAME.
     train_model(model, p, optimizer, trainloader1, trainloader2, valloader1, valloader2)
 
     # wandb.finish()
