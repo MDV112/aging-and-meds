@@ -22,11 +22,11 @@ if __name__ == '__main__':
     # config = dict(n_epochs=p.num_epochs, batch_size=p.batch_size)
     print('Med mode is : {}'.format(p.med_mode))
 
-    tr_dataset_1 = load_datasets(p.train_path, feat2drop=['Age'], med_mode=p.med_mode)
-    x_tr, y_tr, x_val, y_val = split_dataset(tr_dataset_1, proper=p.proper, val_size=p.val_size)
+    tr_dataset_1 = load_datasets(p.train_path, p)
+    x_tr, y_tr, x_val, y_val = split_dataset(tr_dataset_1, p)
     tr_dataset_1, val_dataset_1, scaler1 = scale_dataset(x_tr, y_tr, x_val, y_val)
-    tr_dataset_2 = load_datasets(p.train_path, feat2drop=['Age'], mode=1, med_mode=p.med_mode)
-    x_tr, y_tr, x_val, y_val = split_dataset(tr_dataset_2, proper=p.proper, val_size=p.val_size)
+    tr_dataset_2 = load_datasets(p.train_path, p, mode=1)
+    x_tr, y_tr, x_val, y_val = split_dataset(tr_dataset_2, p)
     tr_dataset_2, val_dataset_2, scaler2 = scale_dataset(x_tr, y_tr, x_val, y_val, mode=1)
 
     ##### NOTICE  WHEN TO USE SCALER FOR TESTING. IF WE USE FULL DATASET FOR LEARNING THUS OUTSIDE SCALER IS NOT NEEDED.

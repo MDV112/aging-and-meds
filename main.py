@@ -30,7 +30,7 @@ if __name__ == '__main__':
     data.load()
     data.split()
     drop_indices = [0, 1, 4, 9, 10, 12, 13, 15, 17]
-    label_dict = {'k_id': 10, 'med': 'all', 'age': [6, 9, 12], 'win_num': 'all', 'seed': 0}
+    label_dict = {'k_id': 10, 'med': 'all', 'age': [6], 'win_num': 'all', 'seed': 0}
     dim_red_dict = dict(perplexity=10.5, init='pca')
     n_components = 2
     n_nets = 1

@@ -4,8 +4,18 @@ import torch
 
 class ProSet:
     def __init__(self):
+
         self.entity = "morandv_team"  # wandb init
         self.med_mode = 'a'  # control or abk ('a')
+        self.log_path = '/home/smorandv/ac8_and_aging_NEW/ac8_and_aging/logs/'
+        self.n_train = None
+        self.n_val = None
+        self.n_test = None
+        self.n_individuals_train = None
+        self.n_individuals_val = None
+        self.n_individuals_test = None
+        self.train_ages = None
+        self.test_ages = None
         # data paths:
         # self.train_path = '/home/smorandv/DynamicalSystems/DynamicalSystems/running_scripts/single_exp/x_y.pkl'
         self.train_path = '/home/smorandv/ac8_and_aging_NEW/ac8_and_aging/rr_data.pkl'
@@ -21,15 +31,15 @@ class ProSet:
         self.flag = 0
         self.phi = np.pi
         # training hyperparameters:
-        self.num_epochs = 200
+        self.num_epochs = 3
         self.pretraining_epoch = 30
-        self.reg_aug = 1/50
+        self.reg_aug = 1/30
         self.reg_supp = 1/20
         self.lr = 0.0000001  # 0.000001
         self.batch_size = 2 ** 4
         self. weight_decay = 1  # optimizer
         # model hyperparmeters:
-        self.e2_idx = 2
+        self.e2_idx = 1
         self.ker_size = 5
         self.stride = 2
         self.dial = 1
@@ -41,4 +51,5 @@ class ProSet:
         self.device = torch.device('cuda:' + str(self.device_ids[0]) if not(self.cpu) else 'cpu')
 
         self.calc_metric = True
-        self.data_type = 'HRV'  # Oximetry
+        self.sig_type = 'rr'
+        self.feat2drop = []
