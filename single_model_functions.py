@@ -21,6 +21,7 @@ from sklearn.preprocessing import MinMaxScaler as MinMax
 from sklearn import metrics
 from sklearn.utils import shuffle
 from datetime import datetime
+import seaborn as sns
 
 
 def load_datasets(full_pickle_path: str, p: object, mode: int = 0, train_mode: bool = True) -> object:
@@ -61,10 +62,16 @@ def load_datasets(full_pickle_path: str, p: object, mode: int = 0, train_mode: b
         x_c = x_c_T.T
         x_a = x_a_T.T
         if p.med_mode == 'c':
-            p.n_train = x_c.shape[1]
+            if train_mode:
+                p.n_train = x_c.shape[1]
+            else:
+                p.n_test = x_c.shape
             dataset = HRVDataset(x_c.T, y_c, mode=mode)  # transpose should fit HRVDataset
         elif p.med_mode == 'a':
-            p.n_train = x_c.shape[1]
+            if train_mode:
+                p.n_train = x_c.shape[1]
+            else:
+                p.n_test = x_c.shape
             dataset = HRVDataset(x_a.T, y_a, mode=mode)  # transpose should fit HRVDataset
         else:  # other medications
             raise NotImplementedError
@@ -192,6 +199,7 @@ def train_epochs(model: object, p: object, *args):
     best_ERR_diff = 1
     best_ACC_diff = 1
     pth = p.log_path + now.strftime("%b-%d-%Y_%H_%M_%S")
+    p.log_path = pth
     os.mkdir(pth)
     for epoch in range(1, p.num_epochs + 1):
         epoch_time = time.time()
@@ -230,12 +238,24 @@ def train_epochs(model: object, p: object, *args):
         idx_val_max = np.argmax(val_acc_vector)
         idx_min_diff_err = np.argmin(np.abs(val_err_vector - training_err_vector))
         idx_min_diff_acc = np.argmin(np.abs(val_acc_vector - train_acc_vector))
-
+        array_test = np.unique(np.array([1+idx_val_min, 1+idx_val_max, 1+idx_min_diff_err, 1+idx_min_diff_acc]))
+        str_test = [str(x) for x in array_test]
+        str_test_new = []
+        for x in str_test:
+            if len(x) == 1:
+                str_test_new.append('0' + x)
+            else:
+                str_test_new.append(x)
+        for file in os.listdir(pth):
+            if (file.endswith(".png") or file.endswith(".pt")) and ('epoch' in file):
+                if not(np.any([s in file for s in str_test_new])):
+                    os.remove(pth + '/' + file)
         plt.plot(np.arange(1, p.num_epochs + 1), 100*training_err_vector, np.arange(1, p.num_epochs + 1), 100*val_err_vector)
         plt.legend(['ERR Train', 'ERR Test'])
         plt.ylabel('ERR [%]')
         plt.xlabel('epochs')
-        plt.show()
+        plt.savefig(pth + '/err.png')
+        plt.close()
         # todo:  threshold
         lines = ['Minimal validation ERR was {:.2f}% in epoch number {}. Training ERR at the same epoch was: {:.2f}%.'
                  .format(100 * np.min(val_err_vector), 1 + idx_val_min, 100 * training_err_vector[idx_val_min]),
@@ -255,7 +275,10 @@ def train_epochs(model: object, p: object, *args):
         plt.legend(['ACC Train', 'ACC Test'])
         plt.ylabel('ACC [%]')
         plt.xlabel('epochs')
-        plt.show()
+        plt.savefig(pth + '/acc.png')
+        plt.close()
+        #todo: delete all irrelevant images. Save best conf_mats
+        # plt.show()
     return
 
 
@@ -306,7 +329,7 @@ def train_batches(model, p, epoch, *args) -> float:
         y_list.append(y_temp)
     optimizer.zero_grad()
     if p.calc_metric:
-        err, best_acc, conf, y = calc_metric(scores_list, y_list, epoch)
+        err, best_acc, conf, y = calc_metric(scores_list, y_list, epoch, p)
         error_analysis(dataloader1, dataloader2, conf, y)
         return running_loss, err, best_acc
     return running_loss
@@ -370,11 +393,11 @@ def eval_batches(model, p,  epoch, *args) -> float:
             scores_list.append(0.5 * (res_temp + 1))  # making the cosine similarity as probability
             y_list.append(y_temp)
         if p.calc_metric:
-            err, best_acc, conf, y = calc_metric(scores_list, y_list, epoch, train_mode='Testing')
+            err, best_acc, conf, y = calc_metric(scores_list, y_list, epoch, p, train_mode='Testing')
             return running_loss, err, best_acc
     return running_loss
 
-def calc_metric(scores_list, y_list, epoch, train_mode='Training'):
+def calc_metric(scores_list, y_list, epoch, p, train_mode='Training'):
     """
     This function calculates metrics relevant to verification task such as FAR, FRR, ERR, confusion matrix etc.
     :param scores_list: list of tensors (mini-batches) that are probability-like.
@@ -431,11 +454,38 @@ def calc_metric(scores_list, y_list, epoch, train_mode='Training'):
                                                                         best_acc, 0.5 * (frr[acc_idx] + far[acc_idx])))
     print(conf_mat_tensor[acc_idx])
 
-    if np.mod(epoch, 10) == 0:
-        plt.plot(thresh, far, thresh, frr, thresh, acc)
-        plt.legend(['FAR', 'FRR', 'ACC'])
-        plt.title('{} mode: ERR = {:.2f}%, epoch = {}, ACC = {:.2f}%'.format(train_mode, 100*err, epoch, 100*best_acc))
-        plt.show()
+    if epoch < 10:
+        str_epoch = '0' + str(epoch)
+    else:
+        str_epoch = str(epoch)
+    if train_mode == 'Training':
+        name1 = 'conf_err_train_epoch_'
+        name2 = 'conf_acc_train_epoch_'
+    else:
+        name1 = 'conf_err_val_epoch_'
+        name2 = 'conf_acc_val_epoch_'
+    torch.save(conf_mat_tensor[err_idx], p.log_path + '/' + name1 + str_epoch + '.pt')
+    torch.save(conf_mat_tensor[acc_idx], p.log_path + '/' + name2 + str_epoch + '.pt')
+    res2 = torch.clone(res_orig)
+    # paint orange res2[res2>= thresh[err_idx]] and blue res2[res < thresh[err_idx]], x_axis is res2 itself. add dashed
+    # line of optimal threshold. Do the same for accuracy, do it wuth subplot
+    sns.histplot(x=res2, hue=y, stat='probability')
+    plt.plot(thresh[err_idx] * np.ones(20), np.linspace(0, 1, 20), thresh[acc_idx] * np.ones(20), np.linspace(0, 1, 20))
+    if train_mode == 'Training':
+        name1 = '/histo_train_epoch_'
+        name2 = '/err_acc_train_epoch_'
+    else:
+        name1 = '/histo_val_epoch_'
+        name2 = '/err_val_epoch_'
+    plt.savefig(p.log_path + name1 + str_epoch + '.png')
+    plt.close()
+    # if np.mod(epoch, 10) == 0:
+    plt.plot(thresh, far, thresh, frr, thresh, acc)
+    plt.legend(['FAR', 'FRR', 'ACC'])
+    plt.title('{} mode: ERR = {:.2f}%, tr = {:.2f}, ACC = {:.2f}%, tr = {:.2f}'.format(train_mode, 100*err, thresh[err_idx], 100*best_acc, thresh[acc_idx]))
+    plt.savefig(p.log_path + name2 + str_epoch + '.png')
+    plt.close()
+    # plt.show()
     return err, best_acc, conf.to(scores.device), y.to(scores.device)
 
 def error_analysis(dataloader1, dataloader2, conf, y):

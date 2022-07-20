@@ -110,7 +110,7 @@ class Dataloader:
         if self.loaded:
             id = np.unique(self.ds_output['id'])
             np.random.seed(seed=seed)
-            rand_idx = np.random.randint(id.shape[0], size=(int(np.ceil(test_size*id.shape[0])),))
+            rand_idx = np.random.choice(np.arange(id.shape[0]), size=int(np.ceil(test_size*id.shape[0])), replace=False)
             age_30 = [559, 727, 730, 751]  # tags of age 30
             idx_30_list = [np.where(id == val) for val in age_30]  # indices in id of 30 months old mice
             if np.any(np.in1d(idx_30_list, rand_idx)):  # make sure that at least one of the 30 months old mice is in the test set
@@ -120,7 +120,8 @@ class Dataloader:
 
             test_mice = list(id[rand_idx])
             p = list(id)
-            train_mice = [i for j, i in enumerate(p) if j not in rand_idx]
+            # train_mice = [i for j, i in enumerate(p) if j not in rand_idx]  # equivalent to the following
+            train_mice = list(np.setdiff1d(np.array(p), test_mice))
             if self.input_type == 'features':
                 self.X_train = self.ds_input[[x in train_mice for x in self.ds_output['id']]]
                 self.x_test = self.ds_input[[x in test_mice for x in self.ds_output['id']]]
@@ -225,7 +226,7 @@ class Dataloader:
                 self.x_train_specific = self.X_train
                 self.y_train_specific = self.Y_train
             else:
-                id = random.choices(id, k=label_dict['k_id'])
+                id = np.random.choice(id, size=label_dict['k_id'], replace=False)
                 self.x_train_specific = self.X_train.loc[[x in id for x in self.Y_train['id']], :]
                 self.y_train_specific = self.Y_train[[x in id for x in self.Y_train['id']]]
 
@@ -276,7 +277,7 @@ class Dataloader:
                 self.x_train_specific = self.X_train
                 self.y_train_specific = self.Y_train
             else:
-                id = random.choices(id, k=label_dict['k_id'])
+                id = np.random.choice(id, size=label_dict['k_id'], replace=False)
                 self.x_train_specific = self.X_train[:, [x in id for x in self.Y_train['id']]]
                 self.y_train_specific = self.Y_train[[x in id for x in self.Y_train['id']]]
 

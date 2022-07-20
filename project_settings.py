@@ -23,7 +23,7 @@ class ProSet:
         self.test_path = '/home/smorandv/ac8_and_aging_NEW/ac8_and_aging/rr_data.pkl'
         # splitting:
         self.proper = True
-        self.val_size = 0.25
+        self.val_size = 0.2
         self.seed = 42
         # cosine loss hyperparameters:
         self.b = -0.5  # -0.8
@@ -31,11 +31,11 @@ class ProSet:
         self.flag = 0
         self.phi = np.pi
         # training hyperparameters:
-        self.num_epochs = 3
-        self.pretraining_epoch = 30
+        self.num_epochs = 20
+        self.pretraining_epoch = 130
         self.reg_aug = 1/30
         self.reg_supp = 1/20
-        self.lr = 0.0000001  # 0.000001
+        self.lr = 0.00001  # 0.000001
         self.batch_size = 2 ** 4
         self. weight_decay = 1  # optimizer
         # model hyperparmeters:
