@@ -986,7 +986,7 @@ class Advrtset(nn.Module):
             sim = torch.exp(tau*torch.matmul(A, z.flatten()))
             L = torch.log(sim[0]/(eps + torch.sum(sim)))
             if not(torch.isnan(L)):  # can happen if tau is not enough to lower the exp in sim
-                I_Z_A -= L.item()  # NOTICE THE MINUS
+                I_Z_A -= L  # NOTICE THE MINUS
         mean_I_Z_A = I_Z_A/len(Z)
         return mean_I_Z_A
 
@@ -998,7 +998,8 @@ class Advrtset(nn.Module):
         :return: support loss as in the paper.
         """
         B_Z_D = 0.0
-        if (domain_tag is not None) or (torch.all(torch.isnan(domain_tag))):
+        if (domain_tag is not None) or bool(torch.all(torch.isnan(domain_tag))) or\
+                bool(torch.diff(domain_tag).sum() == 0):
             eps = 10.0 ** -6
             tau = 10.0 ** -4
             for j, z_domain_pair in enumerate(zip(Z, domain_tag), 0):
@@ -1010,7 +1011,7 @@ class Advrtset(nn.Module):
                 den = torch.sum(torch.exp(tau*torch.matmul(Z.view(Z.size(0), -1), z.flatten())))
                 L = torch.log(nom / (den + eps))
                 if not(torch.isnan(L)):
-                    B_Z_D -= L.item()
+                    B_Z_D -= L
         mean_B_Z_D = B_Z_D/len(Z)
         return mean_B_Z_D
 

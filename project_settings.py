@@ -18,7 +18,8 @@ class ProSet:
         self.test_ages = None
         # data paths:
         # self.train_path = '/home/smorandv/DynamicalSystems/DynamicalSystems/running_scripts/single_exp/x_y.pkl'
-        self.train_path = '/home/smorandv/ac8_and_aging_NEW/ac8_and_aging/rr_data.pkl'
+        # self.train_path = '/home/smorandv/ac8_and_aging_NEW/ac8_and_aging/rr_data.pkl'
+        self.train_path = '/home/smorandv/ac8_and_aging_NEW/ac8_and_aging/rr_human_train_data.pkl'
         # self.test_path = '/home/smorandv/DynamicalSystems/DynamicalSystems/running_scripts/single_exp/no_exp_test.pkl'
         self.test_path = '/home/smorandv/ac8_and_aging_NEW/ac8_and_aging/rr_data.pkl'
         # splitting:
@@ -31,19 +32,22 @@ class ProSet:
         self.flag = 0
         self.phi = np.pi
         # training hyperparameters:
-        self.num_epochs = 20
-        self.pretraining_epoch = 130
+        self.num_epochs = 100
+        self.pretraining_epoch = 60
         self.reg_aug = 1/30
         self.reg_supp = 1/20
-        self.lr = 0.00001  # 0.000001
+        self.lr = 5e-07  # 0.000001
         self.batch_size = 2 ** 4
         self. weight_decay = 1  # optimizer
         # model hyperparmeters:
         self.e2_idx = 1
-        self.ker_size = 5
         self.stride = 2
         self.dial = 1
         self.pad = 0
+        self.num_chann = [128, 128, 64]
+        self.ker_size = 10
+        self.drop_out = 0.15
+        self.num_hidden = [32, 32]
         # gpu:
         self.cpu = False
         self.mult_gpu = False

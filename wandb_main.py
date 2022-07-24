@@ -21,17 +21,22 @@ if __name__ == '__main__':
     # wandb.init('test', entity=p.entity)
     # config = dict(n_epochs=p.num_epochs, batch_size=p.batch_size)
     print('Med mode is : {}'.format(p.med_mode))
-
-    tr_dataset_1 = load_datasets(p.train_path, p)
+    if p.train_path == '/home/smorandv/ac8_and_aging_NEW/ac8_and_aging/rr_human_train_data.pkl':
+        human_flag = 1
+        p.test_path = '/home/smorandv/ac8_and_aging_NEW/ac8_and_aging/rr_human_test_data.pkl'
+    else:
+        human_flag = 0
+    tr_dataset_1 = load_datasets(p.train_path, p, human_flag=human_flag)
     x_tr, y_tr, x_val, y_val = split_dataset(tr_dataset_1, p)
     tr_dataset_1, val_dataset_1, scaler1 = scale_dataset(x_tr, y_tr, x_val, y_val)
-    tr_dataset_2 = load_datasets(p.train_path, p, mode=1)
+    tr_dataset_2 = load_datasets(p.train_path, p, mode=1, human_flag=human_flag)
     x_tr, y_tr, x_val, y_val = split_dataset(tr_dataset_2, p)
     tr_dataset_2, val_dataset_2, scaler2 = scale_dataset(x_tr, y_tr, x_val, y_val, mode=1)
 
     ##### NOTICE  WHEN TO USE SCALER FOR TESTING. IF WE USE FULL DATASET FOR LEARNING THUS OUTSIDE SCALER IS NOT NEEDED.
 
-    model = Advrtset(tr_dataset_1.x.shape[1], p, ker_size=p.ker_size, stride=p.stride, dial=p.dial).to(p.device)
+    model = Advrtset(tr_dataset_1.x.shape[1], p, ker_size=p.ker_size, stride=p.stride, dial=p.dial,
+                     drop_out=p.drop_out, num_chann=p.num_chann, num_hidden=p.num_hidden,).to(p.device)
     if p.mult_gpu:
         model = nn.DataParallel(model, device_ids=p.device_ids)
 

@@ -24,7 +24,7 @@ from datetime import datetime
 import seaborn as sns
 
 
-def load_datasets(full_pickle_path: str, p: object, mode: int = 0, train_mode: bool = True) -> object:
+def load_datasets(full_pickle_path: str, p: object, mode: int = 0, train_mode: bool = True, human_flag=0) -> object:
     """
     This function is used for loading pickls of training and proper testing prepared ahead and rearrange them as
      HRVDataset objects. It is recommended to have pickle with all jrv features since we can drop whatever we want here.
@@ -37,6 +37,17 @@ def load_datasets(full_pickle_path: str, p: object, mode: int = 0, train_mode: b
     :return: HRVDataset object
     """
     if p.sig_type == 'rr':
+        if human_flag:
+            with open(full_pickle_path, 'rb') as f:
+                e = pickle.load(f)
+            x, y = shuffle(e[0], e[1], random_state=0)
+            p.med_mode = 'c'  # for now human are only NSR
+            if train_mode:
+                p.n_train = x.shape[0]
+            else:
+                p.n_test = x.shape[0]
+            dataset = HRVDataset(x, y, mode=mode)
+            return dataset
         with open(full_pickle_path, 'rb') as f:
             e = pickle.load(f)
             if train_mode:
@@ -469,8 +480,8 @@ def calc_metric(scores_list, y_list, epoch, p, train_mode='Training'):
     res2 = torch.clone(res_orig)
     # paint orange res2[res2>= thresh[err_idx]] and blue res2[res < thresh[err_idx]], x_axis is res2 itself. add dashed
     # line of optimal threshold. Do the same for accuracy, do it wuth subplot
-    sns.histplot(x=res2, hue=y, stat='probability')
-    plt.plot(thresh[err_idx] * np.ones(20), np.linspace(0, 1, 20), thresh[acc_idx] * np.ones(20), np.linspace(0, 1, 20))
+    sns.histplot(x=res2, hue=y, stat='probability', bins=int(np.ceil(0.4*len(y))))
+    plt.plot(thresh[err_idx] * np.ones(20), np.linspace(0, 0.1, 20), thresh[acc_idx] * np.ones(20), np.linspace(0, 0.1, 20))
     if train_mode == 'Training':
         name1 = '/histo_train_epoch_'
         name2 = '/err_acc_train_epoch_'
