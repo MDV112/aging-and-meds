@@ -1,7 +1,18 @@
 import scipy.io as sio
 import numpy as np
 import pickle
+
+
+
 def cut2beats(n, sig_list, y):
+    """
+    This function cuts the full RR of every patient into non-overlapping segments at the size of n.
+    :param n: number of beats per example.
+    :param sig_list: list of RR signals where every element belongs to different person.
+    :param y: tags of the patients.
+    :return: tuple of rr matrix at the shape of (n X number of examples) and matrix of labels at the shape of
+    (number of examples X 2).
+    """
     rr_mat = np.zeros((n, 1))
     lbls_mat = np.zeros((1, 2), dtype=int)
     for idx, sig in enumerate(sig_list):

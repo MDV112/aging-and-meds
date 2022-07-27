@@ -9,6 +9,7 @@ from run import Run
 from sklearn.model_selection import train_test_split
 from extra_functions import BuildCNN
 from collections import OrderedDict
+from DSU import DistributionUncertainty
 
 
 def anc_pos_neg(i, out1, out2, lbl1, lbl2):
@@ -158,7 +159,7 @@ def cosine_loss(out1, out2, lbl1, lbl2, flag=0, lmbda=1, b=0):
         return batch_loss.mean()
     else:
         batch_loss = -y*(b + res) + (1/lmbda)*(1 - y)*res  # dividing second term by lmbda is equivalent to multiplying
-        # the first term and divde the whole term in order to get the loss in the original range
+        # the first term and divide the whole term in order to get the loss in the original range
     loss = batch_loss.mean()
     if flag:
         return res, y
@@ -858,7 +859,7 @@ class Advrtset(nn.Module):
         self.conv = nn.ModuleList()
         # self.soft_max = nn.Softmax(dim=1)
         self.p = p
-
+        self.dsu = DistributionUncertainty()
         self.conv.append(nn.Sequential(
             nn.Conv1d(1, num_chann[0], kernel_size=ker_size[0], stride=stride[0], dilation=dial[0], padding=pad[0]),
             nn.BatchNorm1d(num_chann[0]),  # VERY IMPORTANT APPARENTLY
@@ -871,6 +872,7 @@ class Advrtset(nn.Module):
             self.conv.append(nn.Sequential(
                 nn.Conv1d(num_chann[idx - 1], num_chann[idx], kernel_size=ker_size[idx], stride=stride[idx], dilation=dial[idx], padding=pad[idx]),
                 nn.BatchNorm1d(num_chann[idx]),
+                # self.dsu(),
                 nn.ReLU(),
                 # nn.Dropout(drop_out[idx)
             ))
@@ -915,12 +917,12 @@ class Advrtset(nn.Module):
         else:
             out = self.conv[0](x)
             for j in range(1, self.p.e2_idx):
-                out = self.conv[j](out)
+                out = self.conv[j](self.dsu(out))
             aug = self.create_aug(out)
             ##### NOTICE STATRTING FROM self.p.e2_idx #######
             for i in range(self.p.e2_idx, len(self.conv) - len(self.num_hidden)):  # todo: check if range is true
-                out = self.conv[i](out)
-                aug = self.conv[i](aug)
+                out = self.conv[i](self.dsu(out))
+                aug = self.conv[i](self.dsu(aug))
             aug_loss = self.L_aug(out, aug)
             supp_loss = self.L_supp(out, y)
 
@@ -971,7 +973,7 @@ class Advrtset(nn.Module):
         :return: mean MI ratio across the mini-batch.
         """
         vec_idx = torch.arange(Z.shape[0])
-        I_Z_A = 0.0
+        I_Z_A = torch.Tensor([0.0])
         eps = 10.0 ** -6
         tau = 10.0 ** -4  #todo: maybe normalize inputs of exponents by inputs norm
         if n >= Z.shape[0]:
@@ -985,7 +987,7 @@ class Advrtset(nn.Module):
             A = torch.cat((phi_A_pos.flatten().unsqueeze(0), v_bar.view(v_bar.size(0), -1)))
             sim = torch.exp(tau*torch.matmul(A, z.flatten()))
             L = torch.log(sim[0]/(eps + torch.sum(sim)))
-            if not(torch.isnan(L)):  # can happen if tau is not enough to lower the exp in sim
+            if not(torch.isnan(L) or torch.isinf(L)):  # can happen if tau is not enough to lower the exp in sim
                 I_Z_A -= L  # NOTICE THE MINUS
         mean_I_Z_A = I_Z_A/len(Z)
         return mean_I_Z_A
@@ -997,7 +999,7 @@ class Advrtset(nn.Module):
         :param domain_tag: domain labels (age, hospital number etc.).
         :return: support loss as in the paper.
         """
-        B_Z_D = 0.0
+        B_Z_D = torch.Tensor([0.0])
         if (domain_tag is not None) or bool(torch.all(torch.isnan(domain_tag))) or\
                 bool(torch.diff(domain_tag).sum() == 0):
             eps = 10.0 ** -6
@@ -1010,7 +1012,7 @@ class Advrtset(nn.Module):
                 nom = torch.sum(torch.exp(tau*torch.matmul(Z_D.view(Z_D.size(0), -1), z.flatten())))
                 den = torch.sum(torch.exp(tau*torch.matmul(Z.view(Z.size(0), -1), z.flatten())))
                 L = torch.log(nom / (den + eps))
-                if not(torch.isnan(L)):
+                if not(torch.isnan(L) or torch.isinf(L)):
                     B_Z_D -= L
         mean_B_Z_D = B_Z_D/len(Z)
         return mean_B_Z_D

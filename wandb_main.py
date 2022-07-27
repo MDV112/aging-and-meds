@@ -16,20 +16,21 @@ from single_model_functions import *
 from project_settings import ProSet
 
 if __name__ == '__main__':
+    # p = ProSet(read_txt=True, txt_path='/home/smorandv/ac8_and_aging_NEW/ac8_and_aging/logs/Jul-25-2022_11_23_04/')
     p = ProSet()
     # wandb.login()
     # wandb.init('test', entity=p.entity)
     # config = dict(n_epochs=p.num_epochs, batch_size=p.batch_size)
     print('Med mode is : {}'.format(p.med_mode))
     if p.train_path == '/home/smorandv/ac8_and_aging_NEW/ac8_and_aging/rr_human_train_data.pkl':
-        human_flag = 1
+        p.human_flag = 1
         p.test_path = '/home/smorandv/ac8_and_aging_NEW/ac8_and_aging/rr_human_test_data.pkl'
     else:
-        human_flag = 0
-    tr_dataset_1 = load_datasets(p.train_path, p, human_flag=human_flag)
+        p.human_flag = 0
+    tr_dataset_1 = load_datasets(p.train_path, p, human_flag=p.human_flag, samp_per_id=p.samp_per_id)
     x_tr, y_tr, x_val, y_val = split_dataset(tr_dataset_1, p)
     tr_dataset_1, val_dataset_1, scaler1 = scale_dataset(x_tr, y_tr, x_val, y_val)
-    tr_dataset_2 = load_datasets(p.train_path, p, mode=1, human_flag=human_flag)
+    tr_dataset_2 = load_datasets(p.train_path, p, mode=1, human_flag=p.human_flag, samp_per_id=p.samp_per_id)
     x_tr, y_tr, x_val, y_val = split_dataset(tr_dataset_2, p)
     tr_dataset_2, val_dataset_2, scaler2 = scale_dataset(x_tr, y_tr, x_val, y_val, mode=1)
 

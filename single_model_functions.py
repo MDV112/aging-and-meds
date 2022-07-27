@@ -23,8 +23,36 @@ from sklearn.utils import shuffle
 from datetime import datetime
 import seaborn as sns
 
+def choose_win(rr, lbls, samp_per_id=0):
+    """
+    This function chooses random time window for different patients so the RR within it would hopefully be stationary.
+    Since the data comes from holter, the HRV might vary a lot during the day.
+    :param rr: rr_matrix at the size of (beats X number of examples)
+    :param lbls: labels matrix at the size of (number of examples X 2).
+    :param samp_per_id: number of consecutive examples to extract per patient.
+    :return: tuple of rr matrix at the shape of (n X number of examples) and matrix of labels at the shape of
+    (number of examples X 2).
+    """
+    if samp_per_id != 0:
+        tags = np.unique(lbls[:, 0])
+        rr_new = np.zeros((1, rr.shape[1]))
+        lbls_new = np.zeros((1, lbls.shape[1]), dtype=int)
+        for tag in tags:
+            idx = np.argwhere(lbls[:, 0] == tag)
+            if len(idx) > samp_per_id - 1:
+                r_start = np.random.randint(0, len(idx) - samp_per_id - 1)
+                rr_new = np.vstack([rr_new, rr[idx[0, :].item() + r_start : idx[0, :].item() + r_start + samp_per_id, :]])
+                lbls_new = np.vstack([lbls_new, lbls[idx[0, :].item() + r_start : idx[0, :].item() + r_start + samp_per_id, :]])
+            else:
+                rr_new = np.vstack([rr_new, rr])
+                lbls_new = np.vstack([lbls_new, lbls])
+        return rr_new[1:, :], lbls_new[1:, :]
+    else:
+        return rr, lbls
 
-def load_datasets(full_pickle_path: str, p: object, mode: int = 0, train_mode: bool = True, human_flag=0) -> object:
+
+def load_datasets(full_pickle_path: str, p: object, mode: int = 0, train_mode: bool = True, human_flag=0, samp_per_id=0)\
+        -> object:
     """
     This function is used for loading pickls of training and proper testing prepared ahead and rearrange them as
      HRVDataset objects. It is recommended to have pickle with all jrv features since we can drop whatever we want here.
@@ -40,7 +68,10 @@ def load_datasets(full_pickle_path: str, p: object, mode: int = 0, train_mode: b
         if human_flag:
             with open(full_pickle_path, 'rb') as f:
                 e = pickle.load(f)
-            x, y = shuffle(e[0], e[1], random_state=0)
+            chosen_x, chosen_y = choose_win(e[0], e[1], samp_per_id=samp_per_id)
+            x, y = shuffle(chosen_x, chosen_y, random_state=0)
+            # x = x.T - x.mean(axis=1)
+            # x = x.T
             p.med_mode = 'c'  # for now human are only NSR
             if train_mode:
                 p.n_train = x.shape[0]
@@ -201,6 +232,8 @@ def train_epochs(model: object, p: object, *args):
     :return: prints logs of epochs.
     """
     now = datetime.now()
+    training_loss_vector = np.zeros(p.num_epochs)
+    val_loss_vector = np.zeros(p.num_epochs)
     training_err_vector = np.zeros(p.num_epochs)
     val_err_vector = np.zeros(p.num_epochs)
     train_acc_vector = np.zeros(p.num_epochs)
@@ -233,8 +266,10 @@ def train_epochs(model: object, p: object, *args):
             training_loss = train_batches(model, p, epoch, *args)
             validation_loss = eval_model(model, p, epoch, *args)
         training_loss /= len(args[1])  # len of trainloader
+        training_loss_vector[epoch - 1] = training_loss
         if len(args) > 3:  # meaning validation exists.
             validation_loss /= len(args[3])  # len of valloader
+            val_loss_vector[epoch - 1] = validation_loss
         if p.calc_metric:
             log = "Epoch: {} | Training loss: {:.4f}  | Validation loss: {:.4f}  |  Training ERR: {:.4f}  |" \
                   "  Validation ERR: {:.4f}  |  ".format(epoch, training_loss, validation_loss, training_err_vector[epoch - 1],
@@ -266,6 +301,12 @@ def train_epochs(model: object, p: object, *args):
         plt.ylabel('ERR [%]')
         plt.xlabel('epochs')
         plt.savefig(pth + '/err.png')
+        plt.close()
+        plt.plot(np.arange(1, p.num_epochs + 1), training_loss_vector, np.arange(1, p.num_epochs + 1), val_loss_vector)
+        plt.legend(['Train loss', 'Validation loss'])
+        plt.ylabel('loss [N.U]')
+        plt.xlabel('epochs')
+        plt.savefig(pth + '/loss.png')
         plt.close()
         # todo:  threshold
         lines = ['Minimal validation ERR was {:.2f}% in epoch number {}. Training ERR at the same epoch was: {:.2f}%.'
@@ -322,7 +363,7 @@ def train_batches(model, p, epoch, *args) -> float:
             outputs2, aug_loss, supp_loss = model(inputs2, flag_aug=True, y=labels2[:, 1])
             # supp_loss
             # backward + optimize
-            loss = p.reg_aug*aug_loss + p.reg_supp*supp_loss  + cosine_loss(outputs1, outputs2, labels1, labels2, flag=p.flag,
+            loss = -p.reg_aug*aug_loss + p.reg_supp*supp_loss  + cosine_loss(outputs1, outputs2, labels1, labels2, flag=p.flag,
                                                                    lmbda=p.lmbda, b=p.b)
 
         else:
@@ -338,7 +379,7 @@ def train_batches(model, p, epoch, *args) -> float:
         res_temp, y_temp = cosine_loss(outputs1, outputs2, labels1, labels2, flag=1, lmbda=p.lmbda, b=p.b)
         scores_list.append(0.5 * (res_temp + 1))  # making the cosine similarity as probability
         y_list.append(y_temp)
-    optimizer.zero_grad()
+    # optimizer.zero_grad()
     if p.calc_metric:
         err, best_acc, conf, y = calc_metric(scores_list, y_list, epoch, p)
         error_analysis(dataloader1, dataloader2, conf, y)
@@ -435,7 +476,7 @@ def calc_metric(scores_list, y_list, epoch, p, train_mode='Training'):
     res_orig = 2 * scores - 1
     res_orig = res_orig.cpu().detach()
     y = y.cpu().detach()
-    thresh = torch.linspace(scores.min().item() - 1, scores.max().item() + 1, 30)
+    thresh = torch.linspace(scores.min().item() - 1, scores.max().item() + 1, 100)
     far = torch.zeros_like(thresh)  # fpr
     frr = torch.zeros_like(thresh)  # 1 - tpr
     acc = torch.zeros_like(thresh)
