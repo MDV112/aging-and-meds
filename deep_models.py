@@ -160,6 +160,14 @@ def cosine_loss(out1, out2, lbl1, lbl2, flag=0, lmbda=1, b=0):
     else:
         batch_loss = -y*(b + res) + (1/lmbda)*(1 - y)*res  # dividing second term by lmbda is equivalent to multiplying
         # the first term and divide the whole term in order to get the loss in the original range
+        # LeakyReLU_param = 0.1
+        # neg_top_line = b - 0.8
+        # neg_low_line = neg_top_line - 0.6
+        # pos_line = b + 0.2
+        # LeakyReLU = nn.LeakyReLU(LeakyReLU_param)
+        # batch_loss = y * LeakyReLU(pos_line - res) + (1 / lmbda) * (1 - y) * (
+        #             LeakyReLU(res - neg_top_line) * (res >= neg_low_line) + LeakyReLU_param * (
+        #                 neg_low_line - neg_top_line) * (res < neg_low_line))
     loss = batch_loss.mean()
     if flag:
         return res, y
@@ -963,7 +971,7 @@ class Advrtset(nn.Module):
         return A
 
 
-    def L_aug(self, Z, phi_A, n=100):
+    def L_aug(self, Z, phi_A, n=10):
         """
         This function calculates the mutual information (MI) ratio between the representation to its' positive augmentation
         w.r.t. the MI of the representation to its' n negative augmentations.
@@ -973,9 +981,9 @@ class Advrtset(nn.Module):
         :return: mean MI ratio across the mini-batch.
         """
         vec_idx = torch.arange(Z.shape[0])
-        I_Z_A = torch.Tensor([0.0])
+        I_Z_A = torch.tensor(0.0).to(Z.device)
         eps = 10.0 ** -6
-        tau = 10.0 ** -4  #todo: maybe normalize inputs of exponents by inputs norm
+        tau = 10.0 ** -2  #todo: maybe normalize inputs of exponents by inputs norm
         if n >= Z.shape[0]:
             n = Z.shape[0] - 1
         for j, pos_pair in enumerate(zip(Z, phi_A), 0):
@@ -999,9 +1007,9 @@ class Advrtset(nn.Module):
         :param domain_tag: domain labels (age, hospital number etc.).
         :return: support loss as in the paper.
         """
-        B_Z_D = torch.Tensor([0.0])
-        if (domain_tag is not None) or bool(torch.all(torch.isnan(domain_tag))) or\
-                bool(torch.diff(domain_tag).sum() == 0):
+        B_Z_D = torch.tensor(0.0).to(Z.device)
+        if (domain_tag is not None) or not(bool(torch.all(torch.isnan(domain_tag)))) or\
+                bool(torch.diff(domain_tag).sum() != 0):
             eps = 10.0 ** -6
             tau = 10.0 ** -4
             for j, z_domain_pair in enumerate(zip(Z, domain_tag), 0):

@@ -17,8 +17,8 @@ class ProSet:
         self.test_ages = None
         # data paths:
         # self.train_path = '/home/smorandv/DynamicalSystems/DynamicalSystems/running_scripts/single_exp/x_y.pkl'
-        # self.train_path = '/home/smorandv/ac8_and_aging_NEW/ac8_and_aging/rr_data.pkl'
-        self.train_path = '/home/smorandv/ac8_and_aging_NEW/ac8_and_aging/rr_human_train_data.pkl'
+        self.train_path = '/home/smorandv/ac8_and_aging_NEW/ac8_and_aging/rr_data.pkl'
+        # self.train_path = '/home/smorandv/ac8_and_aging_NEW/ac8_and_aging/rr_human_train_data.pkl'
         # self.test_path = '/home/smorandv/DynamicalSystems/DynamicalSystems/running_scripts/single_exp/no_exp_test.pkl'
         self.test_path = '/home/smorandv/ac8_and_aging_NEW/ac8_and_aging/rr_data.pkl'
         # splitting:
@@ -26,27 +26,29 @@ class ProSet:
         self.val_size = 0.2
         self.seed = 42
         self.samp_per_id = 60
-        self.human_flag = True
+        self.human_flag = False
         # cosine loss hyperparameters:
         self.b = 0  # -0.8
-        self.lmbda = 100  # 1000
+        self.lmbda = 1  # 1000
         self.flag = 0
         self.phi = np.pi
         # training hyperparameters:
-        self.num_epochs = 200
-        self.pretraining_epoch = 50
-        self.reg_aug = 1/30
-        self.reg_supp = 1/20
-        self.lr = 1e-07  # 0.000001
-        self.batch_size = 2 ** 4
+        self.num_epochs = 100
+        self.pretraining_epoch = 15
+        self.reg_aug = 0.5
+        self.reg_supp = 0.5
+        self.lr = 5e-06   # 0.000001
+        self.momentum = 0.1
+        self.dampening = 0
+        self.batch_size = 2 ** 5
         self. weight_decay = 1  # optimizer
         # model hyperparmeters:
         self.e2_idx = 2
         self.stride = 2
         self.dial = 1
         self.pad = 0
-        self.num_chann = [128, 128, 64, 64]  # [128, 128, 64]
-        self.ker_size = 5  # 10
+        self.num_chann = [128, 128, 64]  # [128, 128, 64]
+        self.ker_size = 15  # 10
         self.drop_out = 0.05  # 0.15
         self.num_hidden = [32, 32]
         # gpu:

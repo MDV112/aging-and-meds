@@ -155,6 +155,7 @@ def split_dataset(dataset: object, p: object, seed: int = 42) -> tuple:
         np.random.seed(seed)
         tags = np.unique(dataset.y[:,0])
         val_tags = np.random.choice(tags, int(np.floor(p.val_size*len(tags))), replace=False)
+        val_tags = [730, 727, 765, 708, 743, 731, 555, 717, 751]
         train_tags = np.setdiff1d(tags, val_tags)
         p.n_individuals_train = len(train_tags)
         p.n_individuals_val = len(val_tags)
@@ -165,7 +166,7 @@ def split_dataset(dataset: object, p: object, seed: int = 42) -> tuple:
         x_val = dataset.x[val_mask, :]
         y_val = dataset.y[val_mask, :]
     else:  #todo: check if split is done correctly here
-        x_train, x_val, y_train, y_val = train_test_split(dataset.x, dataset.y[:,0], test_size=p.val_size)
+        x_train, x_val, y_train, y_val = train_test_split(dataset.x, dataset.y, test_size=p.val_size, random_state=42)  # random_state is to make sure both dataloaders will have the same split and thus we can preserve 50%-50% tagging using HRVDataset __getitem__
     p.n_train = x_train.shape[0]
     p.n_val = x_val.shape[0]
     return x_train, y_train, x_val, y_val
@@ -361,10 +362,19 @@ def train_batches(model, p, epoch, *args) -> float:
         if epoch > p.pretraining_epoch:
             outputs1= model(inputs1)  # forward pass
             outputs2, aug_loss, supp_loss = model(inputs2, flag_aug=True, y=labels2[:, 1])
+            task_loss =  cosine_loss(outputs1, outputs2, labels1, labels2, flag=p.flag,
+                                                                   lmbda=p.lmbda, b=p.b)
             # supp_loss
             # backward + optimize
-            loss = -p.reg_aug*aug_loss + p.reg_supp*supp_loss  + cosine_loss(outputs1, outputs2, labels1, labels2, flag=p.flag,
-                                                                   lmbda=p.lmbda, b=p.b)
+            if aug_loss.detach().item() > 0:
+                aug_task_ratio = np.abs(task_loss.detach().item() / aug_loss.detach().item())
+            else:
+                aug_task_ratio = 0.0
+            if supp_loss.detach().item() > 0:
+                supp_task_ratio = np.abs(task_loss.detach().item() / supp_loss.detach().item())
+            else:
+                supp_task_ratio = 0.0
+            loss = -p.reg_aug*aug_task_ratio*aug_loss + p.reg_supp*supp_task_ratio*supp_loss  + task_loss
 
         else:
             outputs1 = model(inputs1)  # forward pass
@@ -372,7 +382,9 @@ def train_batches(model, p, epoch, *args) -> float:
             # backward + optimize
             loss = cosine_loss(outputs1, outputs2, labels1, labels2, flag=p.flag, lmbda=p.lmbda, b=p.b)
         optimizer.zero_grad()
-        loss.backward(retain_graph=True)  # backpropagation
+        loss.backward()  # retain_graph=False even though there are multioutput from forward because we define
+        # loss= loss1 + loss2 +loss3. This way, we can free up space in cuda. We mght also want to detach the values
+        # when we assign them to loss vector, acc vector etc
         optimizer.step()
         # accumulate mean loss
         running_loss += loss.data.item()
@@ -409,6 +421,7 @@ def eval_batches(model, p,  epoch, *args) -> float:
     :param: see eval_model
     :return: accumulating loss over an epoch
     """
+
     if len(args) == 5:  # validation (thus training is also there)
         _, _, _, dataloader1, dataloader2 = args
     else:  # (=2) only testing
@@ -430,10 +443,19 @@ def eval_batches(model, p,  epoch, *args) -> float:
             if epoch > p.pretraining_epoch:
                 outputs1 = model(inputs1)  # forward pass
                 outputs2, aug_loss, supp_loss = model(inputs2, flag_aug=True, y=labels2[:, 1])
-                # backward + optimize
+                task_loss = cosine_loss(outputs1, outputs2, labels1, labels2, flag=p.flag,
+                                        lmbda=p.lmbda, b=p.b)
                 # supp_loss
-                loss = p.reg_aug*aug_loss + p.reg_supp*supp_loss + cosine_loss(outputs1, outputs2, labels1, labels2,
-                                                                       flag=p.flag, lmbda=p.lmbda, b=p.b)
+                # backward + optimize
+                if aug_loss.detach().item() > 0:
+                    aug_task_ratio = np.abs(task_loss.detach().item() / aug_loss.detach().item())
+                else:
+                    aug_task_ratio = 0.0
+                if supp_loss.detach().item() > 0:
+                    supp_task_ratio = np.abs(task_loss.detach().item() / supp_loss.detach().item())
+                else:
+                    supp_task_ratio = 0.0
+                loss = -p.reg_aug * aug_task_ratio * aug_loss + p.reg_supp * supp_task_ratio * supp_loss + task_loss
             else:
                 outputs1 = model(inputs1)  # forward pass
                 outputs2 = model(inputs2)
@@ -460,7 +482,7 @@ def calc_metric(scores_list, y_list, epoch, p, train_mode='Training'):
     """
     scores = torch.cat(scores_list)
     y = torch.cat(y_list)
-
+    print(torch.sum(y)/len(y))
     # fpr, tpr, thresholds = metrics.roc_curve(y.detach().cpu(), scores.detach().cpu())
     # # https://stats.stackexchange.com/questions/272962/are-far-and-frr-the-same-as-fpr-and-fnr-respectively
     # far, frr, = fpr, 1 - tpr  # since frr = fnr
@@ -521,20 +543,26 @@ def calc_metric(scores_list, y_list, epoch, p, train_mode='Training'):
     res2 = torch.clone(res_orig)
     # paint orange res2[res2>= thresh[err_idx]] and blue res2[res < thresh[err_idx]], x_axis is res2 itself. add dashed
     # line of optimal threshold. Do the same for accuracy, do it wuth subplot
-    sns.histplot(x=res2, hue=y, stat='probability', bins=int(np.ceil(0.4*len(y))))
-    plt.plot(thresh[err_idx] * np.ones(20), np.linspace(0, 0.1, 20), thresh[acc_idx] * np.ones(20), np.linspace(0, 0.1, 20))
+    sns.histplot(x=res2, hue=y, bins=int(np.ceil(0.3*len(y))))  # , stat='probability', bins=int(np.ceil(0.4*len(y))))
+    plt.axvline(x=thresh[acc_idx], color='r', linestyle='dashed')
+    # plt.plot(thresh[err_idx] * np.ones(20), np.linspace(0, 0.1, 20), thresh[acc_idx] * np.ones(20), np.linspace(0, 0.1, 20))
     if train_mode == 'Training':
         name1 = '/histo_train_epoch_'
         name2 = '/err_acc_train_epoch_'
     else:
         name1 = '/histo_val_epoch_'
         name2 = '/err_val_epoch_'
+    plt.xlabel('Cosine similarity [N.U]')
+    plt.title('{} mode: ACC = {:.2f}%, tr = {:.2f}'.format(train_mode, 100*best_acc, thresh[acc_idx]))
     plt.savefig(p.log_path + name1 + str_epoch + '.png')
     plt.close()
     # if np.mod(epoch, 10) == 0:
-    plt.plot(thresh, far, thresh, frr, thresh, acc)
-    plt.legend(['FAR', 'FRR', 'ACC'])
-    plt.title('{} mode: ERR = {:.2f}%, tr = {:.2f}, ACC = {:.2f}%, tr = {:.2f}'.format(train_mode, 100*err, thresh[err_idx], 100*best_acc, thresh[acc_idx]))
+    plt.plot(thresh, far, thresh, frr)  #, thresh, acc)
+    plt.legend(['FAR', 'FRR'])  #, 'ACC'])
+    # plt.title('{} mode: ERR = {:.2f}%, tr = {:.2f}, ACC = {:.2f}%, tr = {:.2f}'.format(train_mode, 100*err, thresh[err_idx], 100*best_acc, thresh[acc_idx]))
+    plt.xlabel('Cosine similarity [N.U]')
+    plt.ylabel('Error [N.U]')
+    plt.title('{} mode: ERR = {:.2f}%, tr = {:.2f}'.format(train_mode, 100*err, thresh[err_idx]))
     plt.savefig(p.log_path + name2 + str_epoch + '.png')
     plt.close()
     # plt.show()

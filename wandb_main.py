@@ -34,6 +34,8 @@ if __name__ == '__main__':
     x_tr, y_tr, x_val, y_val = split_dataset(tr_dataset_2, p)
     tr_dataset_2, val_dataset_2, scaler2 = scale_dataset(x_tr, y_tr, x_val, y_val, mode=1)
 
+
+
     ##### NOTICE  WHEN TO USE SCALER FOR TESTING. IF WE USE FULL DATASET FOR LEARNING THUS OUTSIDE SCALER IS NOT NEEDED.
 
     model = Advrtset(tr_dataset_1.x.shape[1], p, ker_size=p.ker_size, stride=p.stride, dial=p.dial,
@@ -42,7 +44,7 @@ if __name__ == '__main__':
         model = nn.DataParallel(model, device_ids=p.device_ids)
 
     # optimizer = torch.optim.Adam(model.parameters(), lr=p.lr, weight_decay=p.weight_decay)
-    optimizer = torch.optim.SGD(model.parameters(), lr=p.lr)
+    optimizer = torch.optim.SGD(model.parameters(), lr=p.lr, momentum=p.momentum, dampening=p.dampening, weight_decay=p.weight_decay)
     ############## TRAINING SET ##########################
     trainloader1 = torch.utils.data.DataLoader(
         tr_dataset_1, batch_size=p.batch_size, shuffle=False, num_workers=0, drop_last=True)
@@ -59,3 +61,41 @@ if __name__ == '__main__':
     train_model(model, p, optimizer, trainloader1, trainloader2, valloader1, valloader2)
 
     # wandb.finish()
+
+
+#todo: WE CAN LOAD THE BEST MODEL AND APPLY ON THE TEST
+
+
+
+
+
+    ####### TAKING FULL TRAINING SET AND RUN with TEST
+    #
+    # tr_dataset_1 = load_datasets(p.train_path, p, human_flag=p.human_flag, samp_per_id=p.samp_per_id)
+    # ts_dataset_1 = load_datasets(p.test_path, p, human_flag=p.human_flag, samp_per_id=p.samp_per_id, train_mode=False)
+    # tr_dataset_1, ts_dataset_1, _ = scale_dataset(tr_dataset_1, ts_dataset_1)
+    # tr_dataset_2 = load_datasets(p.train_path, p, human_flag=p.human_flag, samp_per_id=p.samp_per_id)
+    # ts_dataset_2 = load_datasets(p.test_path, p, human_flag=p.human_flag, samp_per_id=p.samp_per_id, train_mode=False)
+    # tr_dataset_2, ts_dataset_2, _ = scale_dataset(tr_dataset_2, ts_dataset_2, mode=1)
+    #
+    # model = Advrtset(tr_dataset_1.x.shape[1], p, ker_size=p.ker_size, stride=p.stride, dial=p.dial,
+    #                  drop_out=p.drop_out, num_chann=p.num_chann, num_hidden=p.num_hidden, ).to(p.device)
+    # if p.mult_gpu:
+    #     model = nn.DataParallel(model, device_ids=p.device_ids)
+    #
+    # # optimizer = torch.optim.Adam(model.parameters(), lr=p.lr, weight_decay=p.weight_decay)
+    # optimizer = torch.optim.SGD(model.parameters(), lr=p.lr, momentum=p.momentum, dampening=p.dampening)
+    # ############## TRAINING SET ##########################
+    # trainloader1 = torch.utils.data.DataLoader(
+    #     tr_dataset_1, batch_size=p.batch_size, shuffle=False, num_workers=0, drop_last=True)
+    # trainloader2 = torch.utils.data.DataLoader(
+    #     tr_dataset_2, batch_size=p.batch_size, shuffle=False, num_workers=0, drop_last=True)
+    # ############## VALIDATION SET ###########################
+    # tsloader1 = torch.utils.data.DataLoader(
+    #     ts_dataset_1, batch_size=p.batch_size, shuffle=False, num_workers=0, drop_last=True)
+    # tsloader2 = torch.utils.data.DataLoader(
+    #     ts_dataset_2, batch_size=p.batch_size, shuffle=False, num_workers=0, drop_last=True)
+    #
+    # # IN VALIDATION SET, IT SHOULD BE VAL_DATASET. ENLARGE
+    # # NUM OF MICE. CHANGE SHUFFLE AS NEEDED FOR DOMAIN. CHECK WHY VAL AND TRAIN LOSS ARE NOT THE SAME.
+    # train_model(model, p, optimizer, trainloader1, trainloader2, tsloader1, tsloader2)

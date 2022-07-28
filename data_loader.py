@@ -119,6 +119,7 @@ class Dataloader:
                 rand_idx[-1] = idx_30_list[np.random.randint(len(idx_30_list))][0].item()
 
             test_mice = list(id[rand_idx])
+            test_mice = [558, 560, 709, 714, 723, 737, 740, 757, 760]
             p = list(id)
             # train_mice = [i for j, i in enumerate(p) if j not in rand_idx]  # equivalent to the following
             train_mice = list(np.setdiff1d(np.array(p), test_mice))
