@@ -37,7 +37,7 @@ class ProSet:
         self.pretraining_epoch = 201
         self.reg_aug = 0.0
         self.reg_supp = 0.0
-        self.lr = 1e-5   # 0.000001
+        self.lr = 5e-6   # 0.000001
         self.momentum = 0.7
         self.dampening = 0
         self.batch_size = 2 ** 4
@@ -57,7 +57,7 @@ class ProSet:
         self.mult_gpu = False
         self.device_ids = [1, 3, 4, 5, 6]  # always a list even if there is only one gpu
         # self.device = torch.device('cuda:' + str(self.device_ids[0]) if not(self.cpu) else 'cpu')
-        self.device = torch.device('cuda:' + str(5) if not (self.cpu) else 'cpu')
+        self.device = torch.device('cuda:' + str(4) if not (self.cpu) else 'cpu')
 
         self.calc_metric = True
         self.sig_type = 'rr'

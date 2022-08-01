@@ -519,6 +519,9 @@ def calc_metric(scores_list, y_list, epoch, p, train_mode='Training'):
         frr[idx] = 1 - (conf_mat[1, 1]/conf_mat.sum(axis=1)[1])
         acc[idx] = conf_mat.trace()/conf_mat.sum()
         conf_mat_tensor[idx, :, :] = conf_mat
+    far[np.isnan(far)] = 1
+    frr[np.isnan(frr)] = 1
+    acc[np.isnan(acc)] = 0
     err_idx = np.argmin(np.abs(frr - far))
     err = 0.5 * (frr[err_idx] + far[err_idx])
     acc_idx = torch.argmax(acc)

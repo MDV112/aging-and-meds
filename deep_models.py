@@ -10,6 +10,7 @@ from sklearn.model_selection import train_test_split
 from extra_functions import BuildCNN
 from collections import OrderedDict
 from DSU import DistributionUncertainty
+from torch.nn.utils import weight_norm
 
 
 def anc_pos_neg(i, out1, out2, lbl1, lbl2):
@@ -158,16 +159,16 @@ def cosine_loss(out1, out2, lbl1, lbl2, flag=0, lmbda=1, b=0):
         batch_loss = (1-2*y)*res
         return batch_loss.mean()
     else:
-        batch_loss = -y*(b + res) + (1/lmbda)*(1 - y)*res  # dividing second term by lmbda is equivalent to multiplying
+        # batch_loss = -y*(b + res) + (1/lmbda)*(1 - y)*res  # dividing second term by lmbda is equivalent to multiplying
         # the first term and divide the whole term in order to get the loss in the original range
-        # LeakyReLU_param = 0.1
-        # neg_top_line = b - 0.8
-        # neg_low_line = neg_top_line - 0.6
-        # pos_line = b + 0.2
-        # LeakyReLU = nn.LeakyReLU(LeakyReLU_param)
-        # batch_loss = y * LeakyReLU(pos_line - res) + (1 / lmbda) * (1 - y) * (
-        #             LeakyReLU(res - neg_top_line) * (res >= neg_low_line) + LeakyReLU_param * (
-        #                 neg_low_line - neg_top_line) * (res < neg_low_line))
+        LeakyReLU_param = 0.1
+        neg_top_line = b - 0.8
+        neg_low_line = neg_top_line - 0.6
+        pos_line = b + 0.2
+        LeakyReLU = nn.LeakyReLU(LeakyReLU_param)
+        batch_loss = y * LeakyReLU(pos_line - res) + (1 / lmbda) * (1 - y) * (
+                    LeakyReLU(res - neg_top_line) * (res >= neg_low_line) + LeakyReLU_param * (
+                        neg_low_line - neg_top_line) * (res < neg_low_line))
     loss = batch_loss.mean()
     if flag:
         return res, y
@@ -869,7 +870,7 @@ class Advrtset(nn.Module):
         self.p = p
         self.dsu = DistributionUncertainty()
         self.conv.append(nn.Sequential(
-            nn.Conv1d(1, num_chann[0], kernel_size=ker_size[0], stride=stride[0], dilation=dial[0], padding=pad[0]),
+            weight_norm(nn.Conv1d(1, num_chann[0], kernel_size=ker_size[0], stride=stride[0], dilation=dial[0], padding=pad[0])),
             nn.BatchNorm1d(num_chann[0]),  # VERY IMPORTANT APPARENTLY
             nn.MaxPool1d(pool_ker_size[0], stride=2),
             nn.ReLU(),
@@ -880,7 +881,7 @@ class Advrtset(nn.Module):
 
         for idx in range(1, len(num_chann)):
             self.conv.append(nn.Sequential(
-                nn.Conv1d(num_chann[idx - 1], num_chann[idx], kernel_size=ker_size[idx], stride=stride[idx], dilation=dial[idx], padding=pad[idx]),
+                weight_norm(nn.Conv1d(num_chann[idx - 1], num_chann[idx], kernel_size=ker_size[idx], stride=stride[idx], dilation=dial[idx], padding=pad[idx])),
                 nn.BatchNorm1d(num_chann[idx]),
                 nn.MaxPool1d(pool_ker_size[idx], stride=2),
                 nn.ReLU(),
