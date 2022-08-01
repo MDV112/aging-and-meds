@@ -841,22 +841,22 @@ class AdverserailCNN(nn.Module):
 
 class Advrtset(nn.Module):
 
-    def __init__(self, nbeats, p, num_chann=[128, 128, 64], ker_size=10, stride=2,
-                 dial=1, pad=0, drop_out=0.15, num_hidden=[32, 32]):
+    def __init__(self, nbeats, p, num_chann=[128, 128, 64], ker_size=10, stride=1,
+                 dial=1, pad=0, drop_out=0.15, num_hidden=[32, 32], pool_ker_size=2):
         super(Advrtset, self).__init__()
 
-        inputs = [num_chann, ker_size, stride, dial, pad, drop_out, num_hidden]
+        inputs = [num_chann, ker_size, stride, dial, pad, drop_out, num_hidden, pool_ker_size]
         # outputs = tuple([[x] for x in inputs if type(x) != list])
         for i, x in enumerate(inputs):
             if type(x) != list:
                 inputs[i] = [x]
-        num_chann, ker_size, stride, dial, pad, drop_out, num_hidden = tuple(inputs)
-        inputs = [ker_size, stride, dial, pad]
+        num_chann, ker_size, stride, dial, pad, drop_out, num_hidden, pool_ker_size = tuple(inputs)
+        inputs = [ker_size, stride, dial, pad, pool_ker_size]
         if len(num_chann) > 1:
             for i, x in enumerate(inputs):
                 if len(x) == 1:
                     inputs[i] = x*len(num_chann)
-        ker_size, stride, dial, pad = tuple(inputs)
+        ker_size, stride, dial, pad, pool_ker_size = tuple(inputs)
         w = [len(p) for p in inputs]
         if not(w == [len(num_chann)]*len(w)):
             raise Exception('One of the convolution components does not equal number of channels')
@@ -871,25 +871,29 @@ class Advrtset(nn.Module):
         self.conv.append(nn.Sequential(
             nn.Conv1d(1, num_chann[0], kernel_size=ker_size[0], stride=stride[0], dilation=dial[0], padding=pad[0]),
             nn.BatchNorm1d(num_chann[0]),  # VERY IMPORTANT APPARENTLY
+            nn.MaxPool1d(pool_ker_size[0], stride=2),
             nn.ReLU(),
             # nn.Dropout(drop_out[0]),
         ))
         L = np.floor(1+(1/stride[0])*(nbeats + 2*pad[0] - dial[0]*(ker_size[0]-1)-1))
+        L = np.floor(1 + (1/2)*(L - (pool_ker_size[0]-1)-1))  # calculating after pooling
 
         for idx in range(1, len(num_chann)):
             self.conv.append(nn.Sequential(
                 nn.Conv1d(num_chann[idx - 1], num_chann[idx], kernel_size=ker_size[idx], stride=stride[idx], dilation=dial[idx], padding=pad[idx]),
                 nn.BatchNorm1d(num_chann[idx]),
-                # self.dsu(),
+                nn.MaxPool1d(pool_ker_size[idx], stride=2),
                 nn.ReLU(),
                 # nn.Dropout(drop_out[idx)
             ))
             L = np.floor(1+(1/stride[idx])*(L + 2*pad[idx] - dial[idx]*(ker_size[idx]-1)-1))
+            L = np.floor(1 + (1/2)*(L - (pool_ker_size[idx]-1)-1))  # calculating after pooling
         L = torch.as_tensor(L, dtype=torch.int64)
         if len(num_chann) == 1:
             idx = 0
         self.conv.append(nn.Sequential(
             nn.Linear(num_chann[idx]*L, num_hidden[0]),
+            nn.Dropout(p=drop_out[idx]),
             nn.BatchNorm1d(num_hidden[0]),
             nn.ReLU(),
             # nn.ReLU(),
@@ -899,13 +903,15 @@ class Advrtset(nn.Module):
         for idx_lin in range(1, len(num_hidden)):
             self.conv.append(nn.Sequential(
                 nn.Linear(num_hidden[idx_lin - 1], num_hidden[idx_lin]),
+                nn.Dropout(p=drop_out[idx_lin]),
                 nn.BatchNorm1d(num_hidden[idx_lin]),
                 nn.ReLU(),
                 # nn.ReLU(),
                 # nn.Dropout(idx + idx_lin + 1)
             ))
-        del self.conv[-1][2]  # last Relu
-        del self.conv[-1][1]  # last batchNorm
+        del self.conv[-1][-1]  # last Relu
+        del self.conv[-1][-1]  # last batchNorm
+        del self.conv[-1][-1]  # last dropout
         a=1
 
     def forward(self, x, flag_aug=False, y=None):

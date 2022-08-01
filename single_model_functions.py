@@ -69,7 +69,7 @@ def load_datasets(full_pickle_path: str, p: object, mode: int = 0, train_mode: b
             with open(full_pickle_path, 'rb') as f:
                 e = pickle.load(f)
             chosen_x, chosen_y = choose_win(e[0], e[1], samp_per_id=samp_per_id)
-            x, y = shuffle(chosen_x, chosen_y, random_state=0)
+            x, y = shuffle(chosen_x, chosen_y, random_state=0)  # for domain mixing
             # x = x.T - x.mean(axis=1)
             # x = x.T
             p.med_mode = 'c'  # for now human are only NSR
@@ -95,6 +95,7 @@ def load_datasets(full_pickle_path: str, p: object, mode: int = 0, train_mode: b
                 y = e.y_test_specific
                 p.test_ages = np.unique(y['age'])
                 print('Ages used in training set are {}'. format(np.unique(y['age'])))
+                p.n_individuals_test = len(np.unique(y['id']))
         x_c, x_a = x[:, y['med'] == 0], x[:, y['med'] == 1]
         y_c, y_a = y[['id', 'age']][y['med'] == 0].values.astype(int), y[['id', 'age']][y['med'] == 1].values.astype(int)
         x_c_T, y_c = shuffle(x_c.T, y_c, random_state=0)  # shuffle is used here for shuffeling ages
@@ -107,13 +108,14 @@ def load_datasets(full_pickle_path: str, p: object, mode: int = 0, train_mode: b
             if train_mode:
                 p.n_train = x_c.shape[1]
             else:
-                p.n_test = x_c.shape
+                p.n_test = x_c.shape[1]
+
             dataset = HRVDataset(x_c.T, y_c, mode=mode)  # transpose should fit HRVDataset
         elif p.med_mode == 'a':
             if train_mode:
-                p.n_train = x_c.shape[1]
+                p.n_train = x_a.shape[1]
             else:
-                p.n_test = x_c.shape
+                p.n_test = x_a.shape[1]
             dataset = HRVDataset(x_a.T, y_a, mode=mode)  # transpose should fit HRVDataset
         else:  # other medications
             raise NotImplementedError
@@ -408,7 +410,7 @@ def eval_model(model, p, epoch, *args):
     :return:
     """
     if len(args) == 3:  # no validation
-        eval_loss = 0
+        raise NotImplementedError
         return eval_loss
     else:
         model.eval()
@@ -543,7 +545,7 @@ def calc_metric(scores_list, y_list, epoch, p, train_mode='Training'):
     res2 = torch.clone(res_orig)
     # paint orange res2[res2>= thresh[err_idx]] and blue res2[res < thresh[err_idx]], x_axis is res2 itself. add dashed
     # line of optimal threshold. Do the same for accuracy, do it wuth subplot
-    sns.histplot(x=res2, hue=y, bins=int(np.ceil(0.3*len(y))))  # , stat='probability', bins=int(np.ceil(0.4*len(y))))
+    sns.histplot(x=res2, hue=y, bins=50)  # , stat='probability', bins=int(np.ceil(0.4*len(y))))
     plt.axvline(x=thresh[acc_idx], color='r', linestyle='dashed')
     # plt.plot(thresh[err_idx] * np.ones(20), np.linspace(0, 0.1, 20), thresh[acc_idx] * np.ones(20), np.linspace(0, 0.1, 20))
     if train_mode == 'Training':
