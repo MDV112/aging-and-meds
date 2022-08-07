@@ -1,27 +1,23 @@
-import os
-
-import numpy as np
-import torch
-import torch.nn as nn
-from data_loader import TorchDataset
-import time
 import copy
+import os
+import pickle
+import time
+from datetime import datetime
+
 import matplotlib.pyplot as plt
-from sklearn.metrics import classification_report
-from sklearn.model_selection import train_test_split
-import pickle
-from deep_models import Advrtset
-from deep_models import cosine_loss
-from tqdm import tqdm
-from torch.utils.data import Dataset
-import pickle
-from comp2ecg_single_model import HRVDataset
+import numpy as np
+import seaborn as sns
+import torch
 from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import MinMaxScaler as MinMax
-from sklearn import metrics
 from sklearn.utils import shuffle
-from datetime import datetime
-import seaborn as sns
+from tqdm import tqdm
+
+from comp2ecg_single_model import HRVDataset
+from deep_models import cosine_loss
+import wandb
+from torch.optim.lr_scheduler import LambdaLR
+
 
 def choose_win(rr, lbls, samp_per_id=0):
     """
@@ -41,8 +37,10 @@ def choose_win(rr, lbls, samp_per_id=0):
             idx = np.argwhere(lbls[:, 0] == tag)
             if len(idx) > samp_per_id - 1:
                 r_start = np.random.randint(0, len(idx) - samp_per_id - 1)
-                rr_new = np.vstack([rr_new, rr[idx[0, :].item() + r_start : idx[0, :].item() + r_start + samp_per_id, :]])
-                lbls_new = np.vstack([lbls_new, lbls[idx[0, :].item() + r_start : idx[0, :].item() + r_start + samp_per_id, :]])
+                rr_new = np.vstack(
+                    [rr_new, rr[idx[0, :].item() + r_start: idx[0, :].item() + r_start + samp_per_id, :]])
+                lbls_new = np.vstack(
+                    [lbls_new, lbls[idx[0, :].item() + r_start: idx[0, :].item() + r_start + samp_per_id, :]])
             else:
                 rr_new = np.vstack([rr_new, rr])
                 lbls_new = np.vstack([lbls_new, lbls])
@@ -51,7 +49,7 @@ def choose_win(rr, lbls, samp_per_id=0):
         return rr, lbls
 
 
-def load_datasets(full_pickle_path: str, p: object, mode: int = 0, train_mode: bool = True, human_flag=0, samp_per_id=0)\
+def load_datasets(full_pickle_path: str, p: object, mode: int = 0, train_mode: bool = True, human_flag=0, samp_per_id=0) \
         -> object:
     """
     This function is used for loading pickls of training and proper testing prepared ahead and rearrange them as
@@ -87,17 +85,18 @@ def load_datasets(full_pickle_path: str, p: object, mode: int = 0, train_mode: b
                 # x = x - x.min()
                 y = e.y_train_specific
                 p.train_ages = np.unique(y['age'])
-                print('Ages used in training set are {}'. format(np.unique(y['age'])))
+                print('Ages used in training set are {}'.format(np.unique(y['age'])))
             else:
                 x = e.x_test_specific
                 # x = x - x.mean(axis=0)
                 # x = x - x.min(axis=0)
                 y = e.y_test_specific
                 p.test_ages = np.unique(y['age'])
-                print('Ages used in training set are {}'. format(np.unique(y['age'])))
+                print('Ages used in training set are {}'.format(np.unique(y['age'])))
                 p.n_individuals_test = len(np.unique(y['id']))
         x_c, x_a = x[:, y['med'] == 0], x[:, y['med'] == 1]
-        y_c, y_a = y[['id', 'age']][y['med'] == 0].values.astype(int), y[['id', 'age']][y['med'] == 1].values.astype(int)
+        y_c, y_a = y[['id', 'age']][y['med'] == 0].values.astype(int), y[['id', 'age']][y['med'] == 1].values.astype(
+            int)
         x_c_T, y_c = shuffle(x_c.T, y_c, random_state=0)  # shuffle is used here for shuffeling ages
         # because in the dataloader it should be false. sklearn should make the shuffle the same. Notice the transpose
         # in x since we want to shuffle the columns fo RR
@@ -120,7 +119,7 @@ def load_datasets(full_pickle_path: str, p: object, mode: int = 0, train_mode: b
         else:  # other medications
             raise NotImplementedError
     else:  # Koopman HRV
-        #todo: add age tags
+        # todo: add age tags
         with open(full_pickle_path, 'rb') as f:
             e = pickle.load(f)
             data = e[0:4]
@@ -155,8 +154,8 @@ def split_dataset(dataset: object, p: object, seed: int = 42) -> tuple:
     """
     if p.proper:  # meaning splitting train and val into different mice or just different time windows
         np.random.seed(seed)
-        tags = np.unique(dataset.y[:,0])
-        val_tags = np.random.choice(tags, int(np.floor(p.val_size*len(tags))), replace=False)
+        tags = np.unique(dataset.y[:, 0])
+        val_tags = np.random.choice(tags, int(np.floor(p.val_size * len(tags))), replace=False)
         val_tags = [730, 727, 765, 708, 743, 731, 555, 717, 751]
         train_tags = np.setdiff1d(tags, val_tags)
         p.n_individuals_train = len(train_tags)
@@ -167,8 +166,9 @@ def split_dataset(dataset: object, p: object, seed: int = 42) -> tuple:
         y_train = dataset.y[train_mask, :]
         x_val = dataset.x[val_mask, :]
         y_val = dataset.y[val_mask, :]
-    else:  #todo: check if split is done correctly here
-        x_train, x_val, y_train, y_val = train_test_split(dataset.x, dataset.y, test_size=p.val_size, random_state=42)  # random_state is to make sure both dataloaders will have the same split and thus we can preserve 50%-50% tagging using HRVDataset __getitem__
+    else:  # todo: check if split is done correctly here
+        x_train, x_val, y_train, y_val = train_test_split(dataset.x, dataset.y, test_size=p.val_size,
+                                                          random_state=42)  # random_state is to make sure both dataloaders will have the same split and thus we can preserve 50%-50% tagging using HRVDataset __getitem__
     p.n_train = x_train.shape[0]
     p.n_val = x_val.shape[0]
     return x_train, y_train, x_val, y_val
@@ -196,13 +196,14 @@ def scale_dataset(*args, input_scaler=None, mode=0, should_scale: bool = False) 
             if should_scale:
                 x_train = scaler.fit_transform(args[0])
                 x_val = scaler.transform(args[2])
-            else:  #todo: remove mean rr from every example
+            else:  # todo: remove mean rr from every example
                 x_train = args[0]
                 x_val = args[2]
             return HRVDataset(x_train, args[1], mode=mode), HRVDataset(x_val, args[3], mode=mode), scaler
         elif len(args) == 2:  # HRVdataset(train) and HRVdataset(test)
             if should_scale:
-                args[0].x = scaler.fit_transform(args[0].x)  # Notice that this won't do anything if training is already scale
+                args[0].x = scaler.fit_transform(
+                    args[0].x)  # Notice that this won't do anything if training is already scale
                 args[1].x = scaler.transform(args[1].x)
             return args
     else:
@@ -235,6 +236,7 @@ def train_epochs(model: object, p: object, *args):
     :return: prints logs of epochs.
     """
     now = datetime.now()
+    d_loss = 0.0
     training_loss_vector = np.zeros(p.num_epochs)
     val_loss_vector = np.zeros(p.num_epochs)
     training_err_vector = np.zeros(p.num_epochs)
@@ -248,11 +250,42 @@ def train_epochs(model: object, p: object, *args):
     pth = p.log_path + now.strftime("%b-%d-%Y_%H_%M_%S")
     p.log_path = pth
     os.mkdir(pth)
+    counter_train = 0
+    counter_val = 0
+    counter_lr = 0
     for epoch in range(1, p.num_epochs + 1):
         epoch_time = time.time()
         if p.calc_metric:
-            training_loss, training_err_vector[epoch - 1], train_acc_vector[epoch - 1] = train_batches(model, p, epoch, *args)
+            training_loss, training_err_vector[epoch - 1], train_acc_vector[epoch - 1] = train_batches(model, p, epoch,
+                                                                                                       *args)
             validation_loss, val_err_vector[epoch - 1], val_acc_vector[epoch - 1] = eval_model(model, p, epoch, *args)
+            wandb.log({'epoch':epoch,'training_err':training_err_vector[epoch - 1],
+                       'training_acc':train_acc_vector[epoch - 1], 'val_err':val_err_vector[epoch - 1],
+                       'val_acc':val_acc_vector[epoch - 1]})
+            if training_err_vector[epoch - 1] >= 0.999:
+                d = epoch - p.curr_train_epoch
+                p.curr_train_epoch = epoch
+                if d == 1:
+                    counter_train += 1
+                else:
+                    counter_train = 0
+                if counter_train > p.patience:
+                    p.error_txt = 'Stopped running since {} training epochs ERR in a row were 1.00'.format(
+                        counter_train)
+                    print(p.error_txt)
+                    break
+            if val_err_vector[epoch - 1] >= 0.999:
+                d = epoch - p.curr_val_epoch
+                p.curr_val_epoch = epoch
+                if d == 1:
+                    counter_val += 1
+                else:
+                    counter_val = 0
+                if counter_val > p.patience:
+                    p.error_txt = 'Stopped running since {} validation epochs ERR in a row were 1.00'.format(
+                        counter_val)
+                    print(p.error_txt)
+                    break
             if val_err_vector[epoch - 1] < best_val_ERR:
                 best_val_ERR = val_err_vector[epoch - 1]
                 torch.save(copy.deepcopy(model.state_dict()), pth + '/best_ERR_model.pt')
@@ -270,24 +303,51 @@ def train_epochs(model: object, p: object, *args):
             validation_loss = eval_model(model, p, epoch, *args)
         training_loss /= len(args[1])  # len of trainloader
         training_loss_vector[epoch - 1] = training_loss
+
+        wandb.log({'training_loss':training_loss})  # , 'learning_rate': p.lr, 'd_loss':d_loss})
+        if epoch > p.lr_ker_size:
+            m1 = training_loss_vector[epoch - p.lr_ker_size - 1: epoch - 1].mean()
+            m2 = training_loss_vector[epoch - p.lr_ker_size : epoch].mean()
+            d_loss = np.abs(m2/m1)
+            lr_lmbda = lambda d_loss: p.lr_factor if ((d_loss > 0.99) and (d_loss < 1.01)) else 1
+            scheduler = LambdaLR(args[0], lr_lambda=lr_lmbda)
+            # scheduler.step()
+            # wandb.log({'learning_rate':scheduler.get_last_lr()})
+
+        # if counter_lr > p.lr_counter:
+        #     p.error_txt = 'Stopped running since learning was reduced {} times with factor of {:.2f}}.'\
+        #         .format(counter_lr, p.lr_factor)
+        #     print(p.error_txt)
+        #     break
         if len(args) > 3:  # meaning validation exists.
             validation_loss /= len(args[3])  # len of valloader
             val_loss_vector[epoch - 1] = validation_loss
+            wandb.log({'val_loss':validation_loss})
         if p.calc_metric:
             log = "Epoch: {} | Training loss: {:.4f}  | Validation loss: {:.4f}  |  Training ERR: {:.4f}  |" \
-                  "  Validation ERR: {:.4f}  |  ".format(epoch, training_loss, validation_loss, training_err_vector[epoch - 1],
-                                                    val_err_vector[epoch - 1])
+                  "  Validation ERR: {:.4f}  |  ".format(epoch, training_loss, validation_loss,
+                                                         training_err_vector[epoch - 1],
+                                                         val_err_vector[epoch - 1])
         else:
-            log = "Epoch: {} | Training loss: {:.4f}  | Validation loss: {:.4f}   ".format(epoch, training_loss, validation_loss)
+            log = "Epoch: {} | Training loss: {:.4f}  | Validation loss: {:.4f}   ".format(epoch, training_loss,
+                                                                                           validation_loss)
         epoch_time = time.time() - epoch_time
+        wandb.log({'epoch_time':epoch_time})
+        if epoch_time > p.epoch_factor*p.first_epoch_time:
+            p.error_txt = 'Stopped running since epoch time was {:.2f} which is at least {} time larger then the first' \
+                          ' epoch time which was {:2f}.'.format(epoch_time, p.epoch_factor, p.first_epoch_time)
+            print(p.error_txt)
+            break
         log += "Epoch Time: {:.2f} secs".format(epoch_time)
         print(log)
+        if epoch == 1:
+            p.first_epoch_time = epoch_time
     if p.calc_metric:
         idx_val_min = np.argmin(val_err_vector)
         idx_val_max = np.argmax(val_acc_vector)
         idx_min_diff_err = np.argmin(np.abs(val_err_vector - training_err_vector))
         idx_min_diff_acc = np.argmin(np.abs(val_acc_vector - train_acc_vector))
-        array_test = np.unique(np.array([1+idx_val_min, 1+idx_val_max, 1+idx_min_diff_err, 1+idx_min_diff_acc]))
+        array_test = np.unique(np.array([1 + idx_val_min, 1 + idx_val_max, 1 + idx_min_diff_err, 1 + idx_min_diff_acc]))
         str_test = [str(x) for x in array_test]
         str_test_new = []
         for x in str_test:
@@ -297,9 +357,10 @@ def train_epochs(model: object, p: object, *args):
                 str_test_new.append(x)
         for file in os.listdir(pth):
             if (file.endswith(".png") or file.endswith(".pt")) and ('epoch' in file):
-                if not(np.any([s in file for s in str_test_new])):
+                if not (np.any([s in file for s in str_test_new])):
                     os.remove(pth + '/' + file)
-        plt.plot(np.arange(1, p.num_epochs + 1), 100*training_err_vector, np.arange(1, p.num_epochs + 1), 100*val_err_vector)
+        plt.plot(np.arange(1, p.num_epochs + 1), 100 * training_err_vector, np.arange(1, p.num_epochs + 1),
+                 100 * val_err_vector)
         plt.legend(['ERR Train', 'ERR Test'])
         plt.ylabel('ERR [%]')
         plt.xlabel('epochs')
@@ -316,14 +377,15 @@ def train_epochs(model: object, p: object, *args):
                  .format(100 * np.min(val_err_vector), 1 + idx_val_min, 100 * training_err_vector[idx_val_min]),
                  'Maximal validation accuracy was {:.2f}% in epoch number {}. Training accuracy at the same epoch was: {:.2f}%.'
                  .format(100 * np.max(val_acc_vector), 1 + idx_val_max, 100 * train_acc_vector[idx_val_max]),
-                 'Minimal absolute value EER difference was {:.2f} in epoch number {}.'.format(np.abs(val_err_vector[idx_min_diff_err]
-                                                        - training_err_vector[idx_min_diff_err]), 1 + idx_min_diff_err),
+                 'Minimal absolute value EER difference was {:.2f} in epoch number {}.'.format(
+                     np.abs(val_err_vector[idx_min_diff_err]
+                            - training_err_vector[idx_min_diff_err]), 1 + idx_min_diff_err),
                  'Minimal absolute value ACC difference was {:.2f} in epoch number {}.'.format(
-                     np.abs(val_acc_vector[idx_min_diff_acc]- train_acc_vector[idx_min_diff_acc]), 1 + idx_min_diff_acc)
+                     np.abs(val_acc_vector[idx_min_diff_acc] - train_acc_vector[idx_min_diff_acc]),
+                     1 + idx_min_diff_acc)
                  ]
 
         write2txt(lines, pth, p)
-
 
         plt.plot(np.arange(1, p.num_epochs + 1), 100 * train_acc_vector, np.arange(1, p.num_epochs + 1),
                  100 * val_acc_vector)
@@ -332,7 +394,7 @@ def train_epochs(model: object, p: object, *args):
         plt.xlabel('epochs')
         plt.savefig(pth + '/acc.png')
         plt.close()
-        #todo: delete all irrelevant images. Save best conf_mats
+        # todo: delete all irrelevant images. Save best conf_mats
         # plt.show()
     return
 
@@ -344,6 +406,7 @@ def train_batches(model, p, epoch, *args) -> float:
     :param epoch: current epoch to check if pretraining is over
     :return: accumalting loss over the epoch.
     """
+    wandb.watch(model, cosine_loss, log="all", log_freq=30)
     if len(args) == 3:  # validation does not exist
         optimizer, dataloader1, dataloader2 = args
     else:
@@ -351,6 +414,7 @@ def train_batches(model, p, epoch, *args) -> float:
     running_loss = 0.0
     scores_list = []
     y_list = []
+    # scheduler = ExponentialLR(optimizer, gamma=0.9)
     for i, data in enumerate(tqdm(zip(dataloader1, dataloader2), total=len(dataloader1)), 0):
         # get the inputs
         inputs1, labels1 = data[0]
@@ -362,21 +426,23 @@ def train_batches(model, p, epoch, *args) -> float:
         labels2 = labels2.to(p.device)
         # forward
         if epoch > p.pretraining_epoch:
-            outputs1= model(inputs1)  # forward pass
-            outputs2, aug_loss, supp_loss = model(inputs2, flag_aug=True, y=labels2[:, 1])
-            task_loss =  cosine_loss(outputs1, outputs2, labels1, labels2, flag=p.flag,
-                                                                   lmbda=p.lmbda, b=p.b)
+            outputs1 = model(inputs1, flag_DSU=p.flag_DSU)  # forward pass
+            outputs2 = model(inputs2, flag_DSU=p.flag_DSU)  # forward pass
+            # outputs2, aug_loss, supp_loss = model(inputs2, flag_aug=False, flag_DSU=True, y=labels2[:, 1])
+            task_loss = cosine_loss(outputs1, outputs2, labels1, labels2, flag=p.flag,
+                                    lmbda=p.lmbda, b=p.b)
+            loss = task_loss
             # supp_loss
             # backward + optimize
-            if aug_loss.detach().item() > 0:
-                aug_task_ratio = np.abs(task_loss.detach().item() / aug_loss.detach().item())
-            else:
-                aug_task_ratio = 0.0
-            if supp_loss.detach().item() > 0:
-                supp_task_ratio = np.abs(task_loss.detach().item() / supp_loss.detach().item())
-            else:
-                supp_task_ratio = 0.0
-            loss = -p.reg_aug*aug_task_ratio*aug_loss + p.reg_supp*supp_task_ratio*supp_loss  + task_loss
+            # if aug_loss.detach().item() > 0:
+            #     aug_task_ratio = np.abs(task_loss.detach().item() / aug_loss.detach().item())
+            # else:
+            #     aug_task_ratio = 0.0
+            # if supp_loss.detach().item() > 0:
+            #     supp_task_ratio = np.abs(task_loss.detach().item() / supp_loss.detach().item())
+            # else:
+            #     supp_task_ratio = 0.0
+            # loss = -p.reg_aug * aug_task_ratio * aug_loss + p.reg_supp * supp_task_ratio * supp_loss + task_loss
 
         else:
             outputs1 = model(inputs1)  # forward pass
@@ -393,12 +459,14 @@ def train_batches(model, p, epoch, *args) -> float:
         res_temp, y_temp = cosine_loss(outputs1, outputs2, labels1, labels2, flag=1, lmbda=p.lmbda, b=p.b)
         scores_list.append(0.5 * (res_temp + 1))  # making the cosine similarity as probability
         y_list.append(y_temp)
-    # optimizer.zero_grad()
+    # scheduler.step()
+    # wandb.log({'learning_rate':scheduler.get_last_lr()})
     if p.calc_metric:
         err, best_acc, conf, y = calc_metric(scores_list, y_list, epoch, p)
         error_analysis(dataloader1, dataloader2, conf, y)
         return running_loss, err, best_acc
     return running_loss
+
 
 def eval_model(model, p, epoch, *args):
     """
@@ -417,7 +485,8 @@ def eval_model(model, p, epoch, *args):
         eval_loss = eval_batches(model, p, epoch, *args)  # without "*" it would have built a tuple in a tuple
         return eval_loss
 
-def eval_batches(model, p,  epoch, *args) -> float:
+
+def eval_batches(model, p, epoch, *args) -> float:
     """
     This function runs evaluation over batches.
     :param: see eval_model
@@ -443,21 +512,23 @@ def eval_batches(model, p,  epoch, *args) -> float:
             labels2 = labels2.to(p.device)
 
             if epoch > p.pretraining_epoch:
-                outputs1 = model(inputs1)  # forward pass
-                outputs2, aug_loss, supp_loss = model(inputs2, flag_aug=True, y=labels2[:, 1])
+                outputs1 = model(inputs1, flag_DSU=p.flag_DSU)  # forward pass
+                outputs2 = model(inputs2, flag_DSU=p.flag_DSU)
+                # outputs2, aug_loss, supp_loss = model(inputs2, flag_aug=False, flag_DSU=True, y=labels2[:, 1])
                 task_loss = cosine_loss(outputs1, outputs2, labels1, labels2, flag=p.flag,
                                         lmbda=p.lmbda, b=p.b)
+                loss = task_loss
                 # supp_loss
                 # backward + optimize
-                if aug_loss.detach().item() > 0:
-                    aug_task_ratio = np.abs(task_loss.detach().item() / aug_loss.detach().item())
-                else:
-                    aug_task_ratio = 0.0
-                if supp_loss.detach().item() > 0:
-                    supp_task_ratio = np.abs(task_loss.detach().item() / supp_loss.detach().item())
-                else:
-                    supp_task_ratio = 0.0
-                loss = -p.reg_aug * aug_task_ratio * aug_loss + p.reg_supp * supp_task_ratio * supp_loss + task_loss
+                # if aug_loss.detach().item() > 0:
+                #     aug_task_ratio = np.abs(task_loss.detach().item() / aug_loss.detach().item())
+                # else:
+                #     aug_task_ratio = 0.0
+                # if supp_loss.detach().item() > 0:
+                #     supp_task_ratio = np.abs(task_loss.detach().item() / supp_loss.detach().item())
+                # else:
+                #     supp_task_ratio = 0.0
+                # loss = -p.reg_aug * aug_task_ratio * aug_loss + p.reg_supp * supp_task_ratio * supp_loss + task_loss
             else:
                 outputs1 = model(inputs1)  # forward pass
                 outputs2 = model(inputs2)
@@ -473,6 +544,7 @@ def eval_batches(model, p,  epoch, *args) -> float:
             return running_loss, err, best_acc
     return running_loss
 
+
 def calc_metric(scores_list, y_list, epoch, p, train_mode='Training'):
     """
     This function calculates metrics relevant to verification task such as FAR, FRR, ERR, confusion matrix etc.
@@ -484,7 +556,7 @@ def calc_metric(scores_list, y_list, epoch, p, train_mode='Training'):
     """
     scores = torch.cat(scores_list)
     y = torch.cat(y_list)
-    print(torch.sum(y)/len(y))
+    print(torch.sum(y) / len(y))
     # fpr, tpr, thresholds = metrics.roc_curve(y.detach().cpu(), scores.detach().cpu())
     # # https://stats.stackexchange.com/questions/272962/are-far-and-frr-the-same-as-fpr-and-fnr-respectively
     # far, frr, = fpr, 1 - tpr  # since frr = fnr
@@ -511,26 +583,33 @@ def calc_metric(scores_list, y_list, epoch, p, train_mode='Training'):
         res2[res_orig >= trh] = 1
         res2[res_orig < trh] = 0
         conf = (res2 == y)
-        conf_mat[0, 0] += torch.sum(1*(conf[res2 == 0] == 1))
-        conf_mat[0, 1] += torch.sum(1*(conf[res2 == 1] == 0))
-        conf_mat[1, 0] += torch.sum(1*(conf[res2 == 0] == 0))
-        conf_mat[1, 1] += torch.sum(1*(conf[res2 == 1] == 1))
-        far[idx] = conf_mat[0, 1]/conf_mat.sum(axis=1)[0]
-        frr[idx] = 1 - (conf_mat[1, 1]/conf_mat.sum(axis=1)[1])
-        acc[idx] = conf_mat.trace()/conf_mat.sum()
+        conf_mat[0, 0] += torch.sum(1 * (conf[res2 == 0] == 1))
+        conf_mat[0, 1] += torch.sum(1 * (conf[res2 == 1] == 0))
+        conf_mat[1, 0] += torch.sum(1 * (conf[res2 == 0] == 0))
+        conf_mat[1, 1] += torch.sum(1 * (conf[res2 == 1] == 1))
+        far[idx] = conf_mat[0, 1] / conf_mat.sum(axis=1)[0]
+        frr[idx] = 1 - (conf_mat[1, 1] / conf_mat.sum(axis=1)[1])
+        acc[idx] = conf_mat.trace() / conf_mat.sum()
         conf_mat_tensor[idx, :, :] = conf_mat
-    far[np.isnan(far)] = 1
-    frr[np.isnan(frr)] = 1
-    acc[np.isnan(acc)] = 0
+    far[torch.isnan(far)] = 1
+    frr[torch.isnan(frr)] = 1
+    acc[torch.isnan(acc)] = 0
     err_idx = np.argmin(np.abs(frr - far))
     err = 0.5 * (frr[err_idx] + far[err_idx])
+    if train_mode == 'Training':
+        wandb.log({'training_thresh_err': thresh[err_idx]})
+    else:
+        wandb.log({'testing_thresh_err': thresh[err_idx]})
     acc_idx = torch.argmax(acc)
     best_acc = acc[acc_idx]
     print('With threshold of {:.2f} we got minimal ERR of {:.2f} and accuracy of  {:.2f}'.format(thresh[err_idx], err,
-                                                                                               acc[err_idx]))
+                                                                                                 acc[err_idx]))
     print(conf_mat_tensor[err_idx])
     print('With threshold of {:.2f} we got maximal accuracy of {:.2f} and ERR of  {:.2f}'.format(thresh[acc_idx],
-                                                                        best_acc, 0.5 * (frr[acc_idx] + far[acc_idx])))
+                                                                                                 best_acc, 0.5 * (frr[
+                                                                                                                      acc_idx] +
+                                                                                                                  far[
+                                                                                                                      acc_idx])))
     print(conf_mat_tensor[acc_idx])
 
     if epoch < 10:
@@ -558,20 +637,21 @@ def calc_metric(scores_list, y_list, epoch, p, train_mode='Training'):
         name1 = '/histo_val_epoch_'
         name2 = '/err_val_epoch_'
     plt.xlabel('Cosine similarity [N.U]')
-    plt.title('{} mode: ACC = {:.2f}%, tr = {:.2f}'.format(train_mode, 100*best_acc, thresh[acc_idx]))
+    plt.title('{} mode: ACC = {:.2f}%, tr = {:.2f}'.format(train_mode, 100 * best_acc, thresh[acc_idx]))
     plt.savefig(p.log_path + name1 + str_epoch + '.png')
     plt.close()
     # if np.mod(epoch, 10) == 0:
-    plt.plot(thresh, far, thresh, frr)  #, thresh, acc)
-    plt.legend(['FAR', 'FRR'])  #, 'ACC'])
+    plt.plot(thresh, far, thresh, frr)  # , thresh, acc)
+    plt.legend(['FAR', 'FRR'])  # , 'ACC'])
     # plt.title('{} mode: ERR = {:.2f}%, tr = {:.2f}, ACC = {:.2f}%, tr = {:.2f}'.format(train_mode, 100*err, thresh[err_idx], 100*best_acc, thresh[acc_idx]))
     plt.xlabel('Cosine similarity [N.U]')
     plt.ylabel('Error [N.U]')
-    plt.title('{} mode: ERR = {:.2f}%, tr = {:.2f}'.format(train_mode, 100*err, thresh[err_idx]))
+    plt.title('{} mode: ERR = {:.2f}%, tr = {:.2f}'.format(train_mode, 100 * err, thresh[err_idx]))
     plt.savefig(p.log_path + name2 + str_epoch + '.png')
     plt.close()
     # plt.show()
     return err, best_acc, conf.to(scores.device), y.to(scores.device)
+
 
 def error_analysis(dataloader1, dataloader2, conf, y):
     # wrong_pairs = (dataloader1.dataset[conf == 0], dataloader2.dataset[conf == 0])
@@ -580,12 +660,10 @@ def error_analysis(dataloader1, dataloader2, conf, y):
 
     pass
 
+
 def write2txt(lines, pth, p):
     # lines += ['n_training = {}, n_validation = {}.'.format(p.n_train, p.n_val),
     #           ]
     lines += ['{} = {}'.format(attr, value) for attr, value in vars(p).items()]
     with open(pth + '/README.txt', 'w') as f:
         f.write('\n'.join(lines))
-
-
-

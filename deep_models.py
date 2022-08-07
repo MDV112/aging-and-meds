@@ -159,16 +159,16 @@ def cosine_loss(out1, out2, lbl1, lbl2, flag=0, lmbda=1, b=0):
         batch_loss = (1-2*y)*res
         return batch_loss.mean()
     else:
-        # batch_loss = -y*(b + res) + (1/lmbda)*(1 - y)*res  # dividing second term by lmbda is equivalent to multiplying
+        batch_loss = -y*(b + res) + (1/lmbda)*(1 - y)*res  # dividing second term by lmbda is equivalent to multiplying
         # the first term and divide the whole term in order to get the loss in the original range
-        LeakyReLU_param = 0.1
-        neg_top_line = b - 0.8
-        neg_low_line = neg_top_line - 0.6
-        pos_line = b + 0.2
-        LeakyReLU = nn.LeakyReLU(LeakyReLU_param)
-        batch_loss = y * LeakyReLU(pos_line - res) + (1 / lmbda) * (1 - y) * (
-                    LeakyReLU(res - neg_top_line) * (res >= neg_low_line) + LeakyReLU_param * (
-                        neg_low_line - neg_top_line) * (res < neg_low_line))
+        # LeakyReLU_param = 0.1
+        # neg_top_line = b - 0.8
+        # neg_low_line = neg_top_line - 0.6
+        # pos_line = b + 0.2
+        # LeakyReLU = nn.LeakyReLU(LeakyReLU_param)
+        # batch_loss = y * LeakyReLU(pos_line - res) + (1 / lmbda) * (1 - y) * (
+        #             LeakyReLU(res - neg_top_line) * (res >= neg_low_line) + LeakyReLU_param * (
+        #                 neg_low_line - neg_top_line) * (res < neg_low_line))
     loss = batch_loss.mean()
     if flag:
         return res, y
@@ -915,21 +915,34 @@ class Advrtset(nn.Module):
         del self.conv[-1][-1]  # last dropout
         a=1
 
-    def forward(self, x, flag_aug=False, y=None):
+    def forward(self, x, flag_aug=False, flag_DSU=False, y=None):
         if not(flag_aug):
-            out = self.conv[0](x)
-            for i in range(1, len(self.conv) - len(self.num_hidden)):  # todo: check if range is true
-                out = self.conv[i](out)
+            if not (flag_DSU):
+                out = self.conv[0](x)
+                for i in range(1, len(self.conv) - len(self.num_hidden)):  # todo: check if range is true
+                    out = self.conv[i](out)
 
-            # collapse
-            out = out.view(out.size(0), -1)
-            for i in range(len(self.conv) - len(self.num_hidden), len(self.conv)):  # todo: check if range is true
-            # linear layer
-                out = self.conv[i](out)  # NOTICE THAT HERE IT IS NOT CONVOLUTION BUT MLP
-            # out = self.soft_max(out)
+                # collapse
+                out = out.view(out.size(0), -1)
+                for i in range(len(self.conv) - len(self.num_hidden), len(self.conv)):  # todo: check if range is true
+                # linear layer
+                    out = self.conv[i](out)  # NOTICE THAT HERE IT IS NOT CONVOLUTION BUT MLP
+                # out = self.soft_max(out)
+            else:
+                out = self.conv[0](x)
+                for i in range(1, len(self.conv) - len(self.num_hidden)):  # todo: check if range is true
+                    out = self.conv[i](self.dsu(out))
+
+                # collapse
+                out = out.view(out.size(0), -1)
+                for i in range(len(self.conv) - len(self.num_hidden), len(self.conv)):  # todo: check if range is true
+                    # linear layer
+                    out = self.conv[i](out)  # NOTICE THAT HERE IT IS NOT CONVOLUTION BUT MLP
+                # out = self.soft_max(out)
 
             return out
         else:
+            ##### This one performes dsu either way (but not on linear layers)
             out = self.conv[0](x)
             for j in range(1, self.p.e2_idx):
                 out = self.conv[j](self.dsu(out))

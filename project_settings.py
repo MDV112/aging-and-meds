@@ -27,17 +27,28 @@ class ProSet:
         self.seed = 42
         self.samp_per_id = 60
         self.human_flag = False
+        # early stopping:
+        self.patience = 5
+        self.lr_ker_size = 5
+        self.lr_counter = 20
+        self.lr_factor = 0.9  # has to be in (0,1)
+        self.curr_train_epoch = 1
+        self.curr_val_epoch = 1
+        self.first_epoch_time = 200
+        self.epoch_factor = 30
+        self.error_txt = None
         # cosine loss hyperparameters:
         self.b = -0.5  # -0.8
         self.lmbda = 1  # 1000
         self.flag = 0
         self.phi = np.pi
         # training hyperparameters:
-        self.num_epochs = 50
-        self.pretraining_epoch = 201
-        self.reg_aug = 0.0
-        self.reg_supp = 0.0
-        self.lr = 5e-6   # 0.000001
+        self.num_epochs = 1000
+        self.pretraining_epoch = 0
+        self.flag_DSU = False
+        self.reg_aug = 0.0  # silenced either way for now in the code
+        self.reg_supp = 0.0 # silenced either way for now in the code
+        self.lr = 1e-8   # 0.000001
         self.momentum = 0.7
         self.dampening = 0
         self.batch_size = 2 ** 4
@@ -57,7 +68,7 @@ class ProSet:
         self.mult_gpu = False
         self.device_ids = [1, 3, 4, 5, 6]  # always a list even if there is only one gpu
         # self.device = torch.device('cuda:' + str(self.device_ids[0]) if not(self.cpu) else 'cpu')
-        self.device = torch.device('cuda:' + str(4) if not (self.cpu) else 'cpu')
+        self.device = torch.device('cuda:' + str(5) if not (self.cpu) else 'cpu')
 
         self.calc_metric = True
         self.sig_type = 'rr'
