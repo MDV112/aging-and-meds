@@ -13,7 +13,7 @@ from sklearn.preprocessing import MinMaxScaler as MinMax
 from sklearn.utils import shuffle
 from tqdm import tqdm
 
-from comp2ecg_single_model import HRVDataset
+from project_settings import HRVDataset
 from deep_models import cosine_loss
 import wandb
 from torch.optim.lr_scheduler import LambdaLR
@@ -103,6 +103,10 @@ def load_datasets(full_pickle_path: str, p: object, mode: int = 0, train_mode: b
         x_a_T, y_a = shuffle(x_a.T, y_a, random_state=0)
         x_c = x_c_T.T
         x_a = x_a_T.T
+        x_ca = np.concatenate((x_c, x_a), axis=1)
+        y_ca = np.concatenate((y_c, y_a))
+        x_ca_T, y_ca = shuffle(x_ca.T, y_ca, random_state=0)
+        x_ca = x_ca_T.T
         if p.med_mode == 'c':
             if train_mode:
                 p.n_train = x_c.shape[1]
@@ -116,6 +120,12 @@ def load_datasets(full_pickle_path: str, p: object, mode: int = 0, train_mode: b
             else:
                 p.n_test = x_a.shape[1]
             dataset = HRVDataset(x_a.T, y_a, mode=mode)  # transpose should fit HRVDataset
+        elif p.med_mode == 'both':
+            if train_mode:
+                p.n_train = x_ca.shape[1]
+            else:
+                p.n_test = x_ca.shape[1]
+            dataset = HRVDataset(x_ca.T, y_ca, mode=mode)  # transpose should fit HRVDataset
         else:  # other medications
             raise NotImplementedError
     else:  # Koopman HRV
@@ -222,7 +232,7 @@ def train_model(model: object, p: object, *args):
     :param p: ProSet (project setting) object.
     :param args: Can be either [optimizer, trainloader1, trainloader1, valloader1, valloader2] or
                                 [optimizer, trainloader1, trainloader1]
-    :param calc_metric: caluclate metrics such as FAR, FPR etc.
+    :param calc_metric: calculate metrics such as FAR, FPR etc.
     :return: void (model is learned).
     """
     model.train()

@@ -1,11 +1,11 @@
 import numpy as np
 import torch
-
+from torch.utils.data import Dataset
 
 class ProSet:
     def __init__(self, read_txt=False, txt_path=None):
         self.entity = "morandv_team"  # wandb init
-        self.med_mode = 'a'  # control or abk ('a')
+        self.med_mode = 'both'  # control or abk ('a')
         self.log_path = '/home/smorandv/ac8_and_aging_NEW/ac8_and_aging/logs/'
         self.n_train = None
         self.n_val = None
@@ -17,16 +17,17 @@ class ProSet:
         self.test_ages = None
         # data paths:
         # self.train_path = '/home/smorandv/DynamicalSystems/DynamicalSystems/running_scripts/single_exp/x_y.pkl'
-        self.train_path = '/home/smorandv/ac8_and_aging_NEW/ac8_and_aging/rr_data.pkl'
-        # self.train_path = '/home/smorandv/ac8_and_aging_NEW/ac8_and_aging/rr_human_train_data.pkl'
+        # self.train_path = '/home/smorandv/ac8_and_aging_NEW/ac8_and_aging/rr_data.pkl'
+        self.train_path = '/home/smorandv/ac8_and_aging_NEW/ac8_and_aging/rr_human_train_data.pkl'
         # self.test_path = '/home/smorandv/DynamicalSystems/DynamicalSystems/running_scripts/single_exp/no_exp_test.pkl'
         self.test_path = '/home/smorandv/ac8_and_aging_NEW/ac8_and_aging/rr_data.pkl'
         # splitting:
-        self.proper = True
+        self.proper = False
+        self.test_mode = self.proper
         self.val_size = 0.2
         self.seed = 42
         self.samp_per_id = 60
-        self.human_flag = False
+        self.human_flag = True
         # early stopping:
         self.patience = 5
         self.lr_ker_size = 5
@@ -43,7 +44,7 @@ class ProSet:
         self.flag = 0
         self.phi = np.pi
         # training hyperparameters:
-        self.num_epochs = 1000
+        self.num_epochs = 50
         self.pretraining_epoch = 0
         self.flag_DSU = False
         self.reg_aug = 0.0  # silenced either way for now in the code
@@ -89,3 +90,48 @@ class ProSet:
                     self.attr = lines[idx][1+lines[idx].find('='):lines[idx].find('\n')].strip()
         a=1
         pass
+
+
+class HRVDataset(Dataset):
+
+    def __init__(self, x, y, mode=0):
+        # self.x = x.clone().detach().requires_grad_(True)
+        super().__init__()
+        self.x = x.copy()
+        self.y = y.copy()
+        self.mode = mode
+
+
+    def __len__(self):
+        return self.x.shape[0]  # since we transpose
+
+    def __getitem__(self, idx):
+        """
+        Two datasets are build for Siamease network. We have to make sure that within a batch
+        the comparison is made 50% of the time with negative example and 50% with negative. The two
+        datasets have shuffle=False. mode=1 will be only for the second dataset
+        :param idx: index of sample
+        :param mode: used for second dataset to have 50% of the mice compared to the first dataset to be different
+        :return:
+        """
+        # np.random.seed(5)
+        if self.mode:
+            y = self.y[idx, 0]
+            r = np.random.randint(2)  # 50%-50%
+            if r:  # find negative example
+                neg_list = np.argwhere(self.y[:, 0] != y)
+                idx = neg_list[np.random.randint(0, len(neg_list))].item()
+            else:
+                idx_temp = None
+                pos_list = np.argwhere(self.y[:, 0] == y)
+                while (idx_temp is None) or (idx_temp == idx):  # avoid comparing the same signals
+                    idx_temp = pos_list[np.random.randint(0, len(pos_list))].item()
+                idx = idx_temp
+        x = self.x[idx:idx+1, :]
+        y = self.y[idx, :]
+        sample = (torch.from_numpy(x).requires_grad_(True).type(torch.FloatTensor), torch.from_numpy(y).type(torch.IntTensor))  # just here convert to torch
+        return sample
+
+
+class TE2TDataset(Dataset):
+    pass
