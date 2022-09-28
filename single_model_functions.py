@@ -12,11 +12,12 @@ from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import MinMaxScaler as MinMax
 from sklearn.utils import shuffle
 from tqdm import tqdm
-
+from scipy import stats
 from project_settings import HRVDataset
 from deep_models import cosine_loss
 import wandb
 from torch.optim.lr_scheduler import LambdaLR
+import seaborn as sns
 
 
 def choose_win(rr, lbls, samp_per_id=0):
@@ -68,8 +69,9 @@ def load_datasets(full_pickle_path: str, p: object, mode: int = 0, train_mode: b
                 e = pickle.load(f)
             chosen_x, chosen_y = choose_win(e[0], e[1], samp_per_id=samp_per_id)
             x, y = shuffle(chosen_x, chosen_y, random_state=0)  # for domain mixing
-            # x = x.T - x.mean(axis=1)
-            # x = x.T
+            if p.remove_mean:
+                x = x.T - x.mean(axis=1)
+                x = x.T
             p.med_mode = 'c'  # for now human are only NSR
             if train_mode:
                 p.n_train = x.shape[0]
@@ -81,15 +83,17 @@ def load_datasets(full_pickle_path: str, p: object, mode: int = 0, train_mode: b
             e = pickle.load(f)
             if train_mode:
                 x = e.x_train_specific
-                # x = x - x.mean(axis=0)
-                # x = x - x.min()
+                if p.remove_mean:
+                    x = x - x.mean(axis=0)
+                    # x = x - x.min()
                 y = e.y_train_specific
                 p.train_ages = np.unique(y['age'])
                 print('Ages used in training set are {}'.format(np.unique(y['age'])))
             else:
                 x = e.x_test_specific
-                # x = x - x.mean(axis=0)
-                # x = x - x.min(axis=0)
+                if p.remove_mean:
+                    x = x - x.mean(axis=0)
+                    # x = x - x.min(axis=0)
                 y = e.y_test_specific
                 p.test_ages = np.unique(y['age'])
                 print('Ages used in training set are {}'.format(np.unique(y['age'])))
@@ -265,13 +269,15 @@ def train_epochs(model: object, p: object, *args):
     counter_lr = 0
     for epoch in range(1, p.num_epochs + 1):
         epoch_time = time.time()
+        # wandb.watch(model, cosine_loss, log="all", log_freq=30)
         if p.calc_metric:
             training_loss, training_err_vector[epoch - 1], train_acc_vector[epoch - 1] = train_batches(model, p, epoch,
                                                                                                        *args)
             validation_loss, val_err_vector[epoch - 1], val_acc_vector[epoch - 1] = eval_model(model, p, epoch, *args)
-            wandb.log({'epoch':epoch,'training_err':training_err_vector[epoch - 1],
-                       'training_acc':train_acc_vector[epoch - 1], 'val_err':val_err_vector[epoch - 1],
-                       'val_acc':val_acc_vector[epoch - 1]})
+            # wandb.log({'epoch':epoch,'training_err':training_err_vector[epoch - 1],
+            #            'training_acc':train_acc_vector[epoch - 1], 'val_err':val_err_vector[epoch - 1],
+            #            'val_acc':val_acc_vector[epoch - 1]})
+            wandb.log({'training_acc':train_acc_vector[epoch - 1],'val_acc':val_acc_vector[epoch - 1],'remaining epochs': p.num_epochs - epoch})
             if training_err_vector[epoch - 1] >= 0.999:
                 d = epoch - p.curr_train_epoch
                 p.curr_train_epoch = epoch
@@ -296,18 +302,20 @@ def train_epochs(model: object, p: object, *args):
                         counter_val)
                     print(p.error_txt)
                     break
-            if val_err_vector[epoch - 1] < best_val_ERR:
-                best_val_ERR = val_err_vector[epoch - 1]
-                torch.save(copy.deepcopy(model.state_dict()), pth + '/best_ERR_model.pt')
-            if val_acc_vector[epoch - 1] > best_val_acc:
-                best_val_acc = val_acc_vector[epoch - 1]
-                torch.save(copy.deepcopy(model.state_dict()), pth + '/best_ACC_model.pt')
-            if np.abs(val_err_vector[epoch - 1] - training_err_vector[epoch - 1]) < best_ERR_diff:
-                best_ERR_diff = np.abs(val_err_vector[epoch - 1] - training_err_vector[epoch - 1])
-                torch.save(copy.deepcopy(model.state_dict()), pth + '/best_ERR_diff_model.pt')
-            if np.abs(val_acc_vector[epoch - 1] - train_acc_vector[epoch - 1]) < best_ACC_diff:
-                best_ACC_diff = np.abs(val_acc_vector[epoch - 1] - train_acc_vector[epoch - 1])
-                torch.save(copy.deepcopy(model.state_dict()), pth + '/best_ACC_diff_model.pt')
+            ############## SAVING BEST MODELS ########################
+            # if val_err_vector[epoch - 1] < best_val_ERR:
+            #     best_val_ERR = val_err_vector[epoch - 1]
+            #     torch.save(copy.deepcopy(model.state_dict()), pth + '/best_ERR_model.pt')
+            # if val_acc_vector[epoch - 1] > best_val_acc:
+            #     best_val_acc = val_acc_vector[epoch - 1]
+            #     torch.save(copy.deepcopy(model.state_dict()), pth + '/best_ACC_model.pt')
+            # if np.abs(val_err_vector[epoch - 1] - training_err_vector[epoch - 1]) < best_ERR_diff:
+            #     best_ERR_diff = np.abs(val_err_vector[epoch - 1] - training_err_vector[epoch - 1])
+            #     torch.save(copy.deepcopy(model.state_dict()), pth + '/best_ERR_diff_model.pt')
+            # if np.abs(val_acc_vector[epoch - 1] - train_acc_vector[epoch - 1]) < best_ACC_diff:
+            #     best_ACC_diff = np.abs(val_acc_vector[epoch - 1] - train_acc_vector[epoch - 1])
+            #     torch.save(copy.deepcopy(model.state_dict()), pth + '/best_ACC_diff_model.pt')
+            #################################################################
         else:
             training_loss = train_batches(model, p, epoch, *args)
             validation_loss = eval_model(model, p, epoch, *args)
@@ -353,59 +361,75 @@ def train_epochs(model: object, p: object, *args):
         if epoch == 1:
             p.first_epoch_time = epoch_time
     if p.calc_metric:
-        idx_val_min = np.argmin(val_err_vector)
-        idx_val_max = np.argmax(val_acc_vector)
-        idx_min_diff_err = np.argmin(np.abs(val_err_vector - training_err_vector))
-        idx_min_diff_acc = np.argmin(np.abs(val_acc_vector - train_acc_vector))
-        array_test = np.unique(np.array([1 + idx_val_min, 1 + idx_val_max, 1 + idx_min_diff_err, 1 + idx_min_diff_acc]))
-        str_test = [str(x) for x in array_test]
-        str_test_new = []
-        for x in str_test:
-            if len(x) == 1:
-                str_test_new.append('0' + x)
-            else:
-                str_test_new.append(x)
-        for file in os.listdir(pth):
-            if (file.endswith(".png") or file.endswith(".pt")) and ('epoch' in file):
-                if not (np.any([s in file for s in str_test_new])):
-                    os.remove(pth + '/' + file)
-        plt.plot(np.arange(1, p.num_epochs + 1), 100 * training_err_vector, np.arange(1, p.num_epochs + 1),
-                 100 * val_err_vector)
-        plt.legend(['ERR Train', 'ERR Test'])
-        plt.ylabel('ERR [%]')
-        plt.xlabel('epochs')
-        plt.savefig(pth + '/err.png')
-        plt.close()
-        plt.plot(np.arange(1, p.num_epochs + 1), training_loss_vector, np.arange(1, p.num_epochs + 1), val_loss_vector)
-        plt.legend(['Train loss', 'Validation loss'])
-        plt.ylabel('loss [N.U]')
-        plt.xlabel('epochs')
-        plt.savefig(pth + '/loss.png')
-        plt.close()
-        # todo:  threshold
-        lines = ['Minimal validation ERR was {:.2f}% in epoch number {}. Training ERR at the same epoch was: {:.2f}%.'
-                 .format(100 * np.min(val_err_vector), 1 + idx_val_min, 100 * training_err_vector[idx_val_min]),
-                 'Maximal validation accuracy was {:.2f}% in epoch number {}. Training accuracy at the same epoch was: {:.2f}%.'
-                 .format(100 * np.max(val_acc_vector), 1 + idx_val_max, 100 * train_acc_vector[idx_val_max]),
-                 'Minimal absolute value EER difference was {:.2f} in epoch number {}.'.format(
-                     np.abs(val_err_vector[idx_min_diff_err]
-                            - training_err_vector[idx_min_diff_err]), 1 + idx_min_diff_err),
-                 'Minimal absolute value ACC difference was {:.2f} in epoch number {}.'.format(
-                     np.abs(val_acc_vector[idx_min_diff_acc] - train_acc_vector[idx_min_diff_acc]),
-                     1 + idx_min_diff_acc)
-                 ]
-
-        write2txt(lines, pth, p)
-
-        plt.plot(np.arange(1, p.num_epochs + 1), 100 * train_acc_vector, np.arange(1, p.num_epochs + 1),
-                 100 * val_acc_vector)
-        plt.legend(['ACC Train', 'ACC Test'])
-        plt.ylabel('ACC [%]')
-        plt.xlabel('epochs')
-        plt.savefig(pth + '/acc.png')
-        plt.close()
-        # todo: delete all irrelevant images. Save best conf_mats
-        # plt.show()
+        pass
+        ################## SAVE PLOTS AND TEXT ########################################
+        # idx_val_min = np.argmin(val_err_vector)
+        # idx_val_max = np.argmax(val_acc_vector)
+        # idx_min_diff_err = np.argmin(np.abs(val_err_vector - training_err_vector))
+        # idx_min_diff_acc = np.argmin(np.abs(val_acc_vector - train_acc_vector))
+        # array_test = np.unique(np.array([1 + idx_val_min, 1 + idx_val_max, 1 + idx_min_diff_err, 1 + idx_min_diff_acc]))
+        # str_test = [str(x) for x in array_test]
+        # str_test_new = []
+        # for x in str_test:
+        #     if len(x) == 1:
+        #         str_test_new.append('0' + x)
+        #     else:
+        #         str_test_new.append(x)
+        # for file in os.listdir(pth):
+        #     if (file.endswith(".png") or file.endswith(".pt")) and ('epoch' in file):
+        #         if not (np.any([s in file for s in str_test_new])):
+        #             os.remove(pth + '/' + file)
+        # plt.plot(np.arange(1, p.num_epochs + 1), 100 * training_err_vector, np.arange(1, p.num_epochs + 1),
+        #          100 * val_err_vector)
+        # plt.legend(['ERR Train', 'ERR Test'])
+        # plt.ylabel('ERR [%]')
+        # plt.xlabel('epochs')
+        # plt.savefig(pth + '/err.png')
+        # plt.close()
+        # plt.plot(np.arange(1, p.num_epochs + 1), training_loss_vector, np.arange(1, p.num_epochs + 1), val_loss_vector)
+        # plt.legend(['Train loss', 'Validation loss'])
+        # plt.ylabel('loss [N.U]')
+        # plt.xlabel('epochs')
+        # plt.savefig(pth + '/loss.png')
+        # plt.close()
+        # # todo:  threshold
+        # lines = ['Minimal validation ERR was {:.2f}% in epoch number {}. Training ERR at the same epoch was: {:.2f}%.'
+        #          .format(100 * np.min(val_err_vector), 1 + idx_val_min, 100 * training_err_vector[idx_val_min]),
+        #          'Maximal validation accuracy was {:.2f}% in epoch number {}. Training accuracy at the same epoch was: {:.2f}%.'
+        #          .format(100 * np.max(val_acc_vector), 1 + idx_val_max, 100 * train_acc_vector[idx_val_max]),
+        #          'Minimal absolute value EER difference was {:.2f} in epoch number {}.'.format(
+        #              np.abs(val_err_vector[idx_min_diff_err]
+        #                     - training_err_vector[idx_min_diff_err]), 1 + idx_min_diff_err),
+        #          'Minimal absolute value ACC difference was {:.2f} in epoch number {}.'.format(
+        #              np.abs(val_acc_vector[idx_min_diff_acc] - train_acc_vector[idx_min_diff_acc]),
+        #              1 + idx_min_diff_acc)
+        #          ]
+        #
+        # write2txt(lines, pth, p)
+        #
+        # plt.plot(np.arange(1, p.num_epochs + 1), 100 * train_acc_vector, np.arange(1, p.num_epochs + 1),
+        #          100 * val_acc_vector)
+        # plt.legend(['ACC Train', 'ACC Test'])
+        # plt.ylabel('ACC [%]')
+        # plt.xlabel('epochs')
+        # plt.savefig(pth + '/acc.png')
+        # plt.close()
+        # # todo: delete all irrelevant images. Save best conf_mats
+        # # plt.show()
+        ######################################################################################
+    fig1, ax = plt.subplots()
+    sns.violinplot(y=val_acc_vector, ax=ax)
+    wandb.log({'val_acc_vln': wandb.Image(fig1)})
+    plt.close()
+    fig2, ax = plt.subplots()
+    sns.violinplot(y=train_acc_vector, ax=ax)
+    wandb.log({'train_acc_vln': wandb.Image(fig2)})
+    plt.close()
+    q = np.nanquantile(val_acc_vector, [0, 0.25, 0.5, 0.75, 1])
+    val_acc_desc = ['{:.3f}'.format(x) for x in q]
+    val_acc_desc.append('{:.3f}'.format(np.mean(val_acc_vector)))
+    wandb.log({'val_acc_stats': wandb.Table(columns=['min', 'Q1', 'med', 'Q3', 'max', 'mean'],
+                                            data=[val_acc_desc])})  # additional square brackets are important
     return
 
 
@@ -416,7 +440,7 @@ def train_batches(model, p, epoch, *args) -> float:
     :param epoch: current epoch to check if pretraining is over
     :return: accumalting loss over the epoch.
     """
-    wandb.watch(model, cosine_loss, log="all", log_freq=30)
+    # wandb.watch(model, cosine_loss, log="all", log_freq=30)
     if len(args) == 3:  # validation does not exist
         optimizer, dataloader1, dataloader2 = args
     else:
@@ -606,10 +630,10 @@ def calc_metric(scores_list, y_list, epoch, p, train_mode='Training'):
     acc[torch.isnan(acc)] = 0
     err_idx = np.argmin(np.abs(frr - far))
     err = 0.5 * (frr[err_idx] + far[err_idx])
-    if train_mode == 'Training':
-        wandb.log({'training_thresh_err': thresh[err_idx]})
-    else:
-        wandb.log({'testing_thresh_err': thresh[err_idx]})
+    # if train_mode == 'Training':
+    #     wandb.log({'training_thresh_err': thresh[err_idx]})
+    # else:
+    #     wandb.log({'testing_thresh_err': thresh[err_idx]})
     acc_idx = torch.argmax(acc)
     best_acc = acc[acc_idx]
     print('With threshold of {:.2f} we got minimal ERR of {:.2f} and accuracy of  {:.2f}'.format(thresh[err_idx], err,

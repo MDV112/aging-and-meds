@@ -1,11 +1,27 @@
 import numpy as np
 import torch
 from torch.utils.data import Dataset
+import argparse
+
+def init_parser(parent, add_help=False):
+    """
+    This function converts ProSet class to parser.
+    :param parent: empty_parser (in wandb_main)
+    :param add_help:
+    :return: parser
+    """
+    parser = argparse.ArgumentParser(parents=[parent], add_help=add_help)
+    p = ProSet()
+    for idx, (attr, val) in enumerate(vars(p).items()):
+        parser.add_argument('--' + attr, default=val)
+        # example: parser.add_argument('--entity' , default='morandv_team', type=str, help='wandb init')
+    return parser
+
 
 class ProSet:
     def __init__(self, read_txt=False, txt_path=None):
         self.entity = "morandv_team"  # wandb init
-        self.med_mode = 'both'  # control or abk ('a')
+        self.med_mode = 'both'  # control ('c'), abk ('a') or both ('both')
         self.log_path = '/home/smorandv/ac8_and_aging_NEW/ac8_and_aging/logs/'
         self.n_train = None
         self.n_val = None
@@ -22,12 +38,13 @@ class ProSet:
         # self.test_path = '/home/smorandv/DynamicalSystems/DynamicalSystems/running_scripts/single_exp/no_exp_test.pkl'
         self.test_path = '/home/smorandv/ac8_and_aging_NEW/ac8_and_aging/rr_data.pkl'
         # splitting:
-        self.proper = False
-        self.test_mode = self.proper
+        self.proper = True
+        self.remove_mean = False
+        self.test_mode = False
         self.val_size = 0.2
         self.seed = 42
         self.samp_per_id = 60
-        self.human_flag = True
+        self.human_flag = False
         # early stopping:
         self.patience = 5
         self.lr_ker_size = 5
@@ -40,30 +57,30 @@ class ProSet:
         self.error_txt = None
         # cosine loss hyperparameters:
         self.b = -0.5  # -0.8
-        self.lmbda = 1  # 1000
+        self.lmbda = 1.0  # 1000
         self.flag = 0
         self.phi = np.pi
         # training hyperparameters:
-        self.num_epochs = 50
+        self.num_epochs = 500
         self.pretraining_epoch = 0
         self.flag_DSU = False
         self.reg_aug = 0.0  # silenced either way for now in the code
         self.reg_supp = 0.0 # silenced either way for now in the code
         self.lr = 1e-8   # 0.000001
         self.momentum = 0.7
-        self.dampening = 0
+        self.dampening = 0.0
         self.batch_size = 2 ** 4
-        self. weight_decay = 1  # optimizer
+        self. weight_decay = 1.0  # optimizer
         # model hyperparmeters:
         self.e2_idx = 2
         self.stride = 1
         self.dial = 1
         self.pad = 0
-        self.num_chann = [128, 128, 64]  # [128, 128, 64]
+        self.num_chann = [64, 128, 256]  # [128, 128, 64]
         self.ker_size = 15  # 10
         self.pool_ker_size = 2
         self.drop_out = 0.25  # 0.15
-        self.num_hidden = [128, 64, 32]
+        self.num_hidden = [128, 64, 32]  # [128, 64, 32]
         # gpu:
         self.cpu = False
         self.mult_gpu = False
@@ -135,3 +152,9 @@ class HRVDataset(Dataset):
 
 class TE2TDataset(Dataset):
     pass
+
+# if __name__ == '__main__':
+#     empty_parser = argparse.ArgumentParser()
+#     parser = init_parser(parent=empty_parser)
+#     run_config = parser.parse_args()  # parse args from cli
+#     a=1

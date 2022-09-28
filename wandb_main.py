@@ -14,8 +14,10 @@ from torch.utils.data import Dataset
 import wandb
 from single_model_functions import *
 from project_settings import ProSet
+from project_settings import init_parser
 import subprocess as sp
 import os
+import argparse
 
 
 if __name__ == '__main__':
@@ -29,8 +31,14 @@ if __name__ == '__main__':
             p.device = device
             break
     wandb.login()
+    empty_parser = argparse.ArgumentParser()
+    parser = init_parser(parent=empty_parser)
+    p = parser.parse_args()
     with wandb.init('test2', entity=p.entity, config=p):
-        config = wandb.config
+        # wandb.run.name = 'stam'
+        # wandb.run.save()
+        # config = wandb.config
+        p = argparse.Namespace(**wandb.config)
         if not(p.test_mode):
             print('Med mode is : {}'.format(p.med_mode))
             if p.human_flag:
@@ -64,6 +72,7 @@ if __name__ == '__main__':
             valloader2 = torch.utils.data.DataLoader(
                 val_dataset_2, batch_size=p.batch_size, shuffle=False, num_workers=0, drop_last=True)
 
+            wandb.watch(model, cosine_loss, log="all", log_freq=30)
             train_model(model, p, optimizer, trainloader1, trainloader2, valloader1, valloader2)
 
             wandb.finish()

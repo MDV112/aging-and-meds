@@ -913,7 +913,14 @@ class Advrtset(nn.Module):
         del self.conv[-1][-1]  # last Relu
         del self.conv[-1][-1]  # last batchNorm
         del self.conv[-1][-1]  # last dropout
+        self.conv.apply(self._init_weights)
+        # self.conv.apply(nn.init.kaiming_uniform_(self.conv.weight, mode='fan_in', nonlinearity='relu'))
         a=1
+
+    def _init_weights(self, m):
+        if isinstance(m, nn.Conv1d) or isinstance(m, nn.Linear):
+            nn.init.kaiming_uniform_(m.weight)
+            m.bias.data.fill_(0.01)
 
     def forward(self, x, flag_aug=False, flag_DSU=False, y=None):
         if not(flag_aug):
