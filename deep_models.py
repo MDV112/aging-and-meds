@@ -11,7 +11,7 @@ from extra_functions import BuildCNN
 from collections import OrderedDict
 from DSU import DistributionUncertainty
 from torch.nn.utils import weight_norm
-
+# from tsai.models import TCN
 
 def anc_pos_neg(i, out1, out2, lbl1, lbl2):
     anchor = out1[i, :]
@@ -919,7 +919,7 @@ class Advrtset(nn.Module):
 
     def _init_weights(self, m):
         if isinstance(m, nn.Conv1d) or isinstance(m, nn.Linear):
-            nn.init.kaiming_uniform_(m.weight)
+            nn.init.kaiming_uniform_(m.weight, mode='fan_in', nonlinearity='relu')
             m.bias.data.fill_(0.01)
 
     def forward(self, x, flag_aug=False, flag_DSU=False, y=None):

@@ -269,15 +269,15 @@ def train_epochs(model: object, p: object, *args):
     counter_lr = 0
     for epoch in range(1, p.num_epochs + 1):
         epoch_time = time.time()
-        # wandb.watch(model, cosine_loss, log="all", log_freq=30)
         if p.calc_metric:
             training_loss, training_err_vector[epoch - 1], train_acc_vector[epoch - 1] = train_batches(model, p, epoch,
                                                                                                        *args)
             validation_loss, val_err_vector[epoch - 1], val_acc_vector[epoch - 1] = eval_model(model, p, epoch, *args)
-            # wandb.log({'epoch':epoch,'training_err':training_err_vector[epoch - 1],
-            #            'training_acc':train_acc_vector[epoch - 1], 'val_err':val_err_vector[epoch - 1],
-            #            'val_acc':val_acc_vector[epoch - 1]})
-            wandb.log({'training_acc':train_acc_vector[epoch - 1],'val_acc':val_acc_vector[epoch - 1],'remaining epochs': p.num_epochs - epoch})
+            if p.wandb_enable:
+                # wandb.log({'epoch':epoch,'training_err':training_err_vector[epoch - 1],
+                #            'training_acc':train_acc_vector[epoch - 1], 'val_err':val_err_vector[epoch - 1],
+                #            'val_acc':val_acc_vector[epoch - 1]})
+                wandb.log({'training_acc':train_acc_vector[epoch - 1],'val_acc':val_acc_vector[epoch - 1],'remaining epochs': p.num_epochs - epoch})
             if training_err_vector[epoch - 1] >= 0.999:
                 d = epoch - p.curr_train_epoch
                 p.curr_train_epoch = epoch
@@ -321,8 +321,8 @@ def train_epochs(model: object, p: object, *args):
             validation_loss = eval_model(model, p, epoch, *args)
         training_loss /= len(args[1])  # len of trainloader
         training_loss_vector[epoch - 1] = training_loss
-
-        wandb.log({'training_loss':training_loss})  # , 'learning_rate': p.lr, 'd_loss':d_loss})
+        if p.wandb_enable:
+            wandb.log({'training_loss':training_loss})  # , 'learning_rate': p.lr, 'd_loss':d_loss})
         if epoch > p.lr_ker_size:
             m1 = training_loss_vector[epoch - p.lr_ker_size - 1: epoch - 1].mean()
             m2 = training_loss_vector[epoch - p.lr_ker_size : epoch].mean()
@@ -340,7 +340,8 @@ def train_epochs(model: object, p: object, *args):
         if len(args) > 3:  # meaning validation exists.
             validation_loss /= len(args[3])  # len of valloader
             val_loss_vector[epoch - 1] = validation_loss
-            wandb.log({'val_loss':validation_loss})
+            if p.wandb_enable:
+                wandb.log({'val_loss':validation_loss})
         if p.calc_metric:
             log = "Epoch: {} | Training loss: {:.4f}  | Validation loss: {:.4f}  |  Training ERR: {:.4f}  |" \
                   "  Validation ERR: {:.4f}  |  ".format(epoch, training_loss, validation_loss,
@@ -350,7 +351,8 @@ def train_epochs(model: object, p: object, *args):
             log = "Epoch: {} | Training loss: {:.4f}  | Validation loss: {:.4f}   ".format(epoch, training_loss,
                                                                                            validation_loss)
         epoch_time = time.time() - epoch_time
-        wandb.log({'epoch_time':epoch_time})
+        if p.wandb_enable:
+            wandb.log({'epoch_time':epoch_time})
         if epoch_time > p.epoch_factor*p.first_epoch_time:
             p.error_txt = 'Stopped running since epoch time was {:.2f} which is at least {} time larger then the first' \
                           ' epoch time which was {:2f}.'.format(epoch_time, p.epoch_factor, p.first_epoch_time)
@@ -419,16 +421,20 @@ def train_epochs(model: object, p: object, *args):
         ######################################################################################
     fig1, ax = plt.subplots()
     sns.violinplot(y=val_acc_vector, ax=ax)
-    wandb.log({'val_acc_vln': wandb.Image(fig1)})
+    if p.wandb_enable:
+        wandb.log({'val_acc_vln': wandb.Image(fig1)})
     plt.close()
     fig2, ax = plt.subplots()
     sns.violinplot(y=train_acc_vector, ax=ax)
-    wandb.log({'train_acc_vln': wandb.Image(fig2)})
+    if p.wandb_enable:
+        wandb.log({'train_acc_vln': wandb.Image(fig2)})
     plt.close()
     q = np.nanquantile(val_acc_vector, [0, 0.25, 0.5, 0.75, 1])
     val_acc_desc = ['{:.3f}'.format(x) for x in q]
     val_acc_desc.append('{:.3f}'.format(np.mean(val_acc_vector)))
-    wandb.log({'val_acc_stats': wandb.Table(columns=['min', 'Q1', 'med', 'Q3', 'max', 'mean'],
+    val_acc_desc.append('{}'.format(1 + np.argmax(val_acc_vector)))
+    if p.wandb_enable:
+        wandb.log({'val_acc_stats': wandb.Table(columns=['min', 'Q1', 'med', 'Q3', 'max', 'mean', 'max_epoch'],
                                             data=[val_acc_desc])})  # additional square brackets are important
     return
 
@@ -440,7 +446,6 @@ def train_batches(model, p, epoch, *args) -> float:
     :param epoch: current epoch to check if pretraining is over
     :return: accumalting loss over the epoch.
     """
-    # wandb.watch(model, cosine_loss, log="all", log_freq=30)
     if len(args) == 3:  # validation does not exist
         optimizer, dataloader1, dataloader2 = args
     else:
@@ -630,10 +635,12 @@ def calc_metric(scores_list, y_list, epoch, p, train_mode='Training'):
     acc[torch.isnan(acc)] = 0
     err_idx = np.argmin(np.abs(frr - far))
     err = 0.5 * (frr[err_idx] + far[err_idx])
-    # if train_mode == 'Training':
-    #     wandb.log({'training_thresh_err': thresh[err_idx]})
-    # else:
-    #     wandb.log({'testing_thresh_err': thresh[err_idx]})
+    if p.wandb_enable:
+        # if train_mode == 'Training':
+        #     wandb.log({'training_thresh_err': thresh[err_idx]})
+        # else:
+        #     wandb.log({'testing_thresh_err': thresh[err_idx]})
+        pass
     acc_idx = torch.argmax(acc)
     best_acc = acc[acc_idx]
     print('With threshold of {:.2f} we got minimal ERR of {:.2f} and accuracy of  {:.2f}'.format(thresh[err_idx], err,

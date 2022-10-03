@@ -21,7 +21,7 @@ def init_parser(parent, add_help=False):
 class ProSet:
     def __init__(self, read_txt=False, txt_path=None):
         self.entity = "morandv_team"  # wandb init
-        self.med_mode = 'both'  # control ('c'), abk ('a') or both ('both')
+        self.med_mode = 'c'  # control ('c'), abk ('a') or both ('both')
         self.log_path = '/home/smorandv/ac8_and_aging_NEW/ac8_and_aging/logs/'
         self.n_train = None
         self.n_val = None
@@ -45,6 +45,7 @@ class ProSet:
         self.seed = 42
         self.samp_per_id = 60
         self.human_flag = False
+        self.wandb_enable = True
         # early stopping:
         self.patience = 5
         self.lr_ker_size = 5
@@ -76,7 +77,7 @@ class ProSet:
         self.stride = 1
         self.dial = 1
         self.pad = 0
-        self.num_chann = [64, 128, 256]  # [128, 128, 64]
+        self.num_chann = [128, 128, 64]  # probably should be ascending order
         self.ker_size = 15  # 10
         self.pool_ker_size = 2
         self.drop_out = 0.25  # 0.15
