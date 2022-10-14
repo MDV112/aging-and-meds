@@ -954,7 +954,7 @@ class Advrtset(nn.Module):
             for j in range(1, self.p.e2_idx):
                 out = self.conv[j](self.dsu(out))
             aug = self.create_aug(out)
-            ##### NOTICE STATRTING FROM self.p.e2_idx #######
+            ##### NOTICE STARTING FROM self.p.e2_idx #######
             for i in range(self.p.e2_idx, len(self.conv) - len(self.num_hidden)):  # todo: check if range is true
                 out = self.conv[i](self.dsu(out))
                 aug = self.conv[i](self.dsu(aug))

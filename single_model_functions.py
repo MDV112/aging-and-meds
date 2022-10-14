@@ -261,9 +261,10 @@ def train_epochs(model: object, p: object, *args):
     best_val_acc = 0
     best_ERR_diff = 1
     best_ACC_diff = 1
-    pth = p.log_path + now.strftime("%b-%d-%Y_%H_%M_%S")
-    p.log_path = pth
-    os.mkdir(pth)
+    if p.mkdir:
+        pth = '/home/smorandv/ac8_and_aging_NEW/ac8_and_aging/logs/' + now.strftime("%b-%d-%Y_%H_%M_%S")
+        p.log_path = pth
+        os.mkdir(pth)
     counter_train = 0
     counter_val = 0
     counter_lr = 0
@@ -465,8 +466,10 @@ def train_batches(model, p, epoch, *args) -> float:
         labels2 = labels2.to(p.device)
         # forward
         if epoch > p.pretraining_epoch:
-            outputs1 = model(inputs1, flag_DSU=p.flag_DSU)  # forward pass
-            outputs2 = model(inputs2, flag_DSU=p.flag_DSU)  # forward pass
+            # outputs1 = model(inputs1, flag_DSU=p.flag_DSU)  # forward pass
+            # outputs2 = model(inputs2, flag_DSU=p.flag_DSU)  # forward pass
+            outputs1 = model(inputs1)
+            outputs2 = model(inputs2)
             # outputs2, aug_loss, supp_loss = model(inputs2, flag_aug=False, flag_DSU=True, y=labels2[:, 1])
             task_loss = cosine_loss(outputs1, outputs2, labels1, labels2, flag=p.flag,
                                     lmbda=p.lmbda, b=p.b)
@@ -551,8 +554,10 @@ def eval_batches(model, p, epoch, *args) -> float:
             labels2 = labels2.to(p.device)
 
             if epoch > p.pretraining_epoch:
-                outputs1 = model(inputs1, flag_DSU=p.flag_DSU)  # forward pass
-                outputs2 = model(inputs2, flag_DSU=p.flag_DSU)
+                # outputs1 = model(inputs1, flag_DSU=p.flag_DSU)  # forward pass
+                # outputs2 = model(inputs2, flag_DSU=p.flag_DSU)
+                outputs1 = model(inputs1)
+                outputs2 = model(inputs2)
                 # outputs2, aug_loss, supp_loss = model(inputs2, flag_aug=False, flag_DSU=True, y=labels2[:, 1])
                 task_loss = cosine_loss(outputs1, outputs2, labels1, labels2, flag=p.flag,
                                         lmbda=p.lmbda, b=p.b)
@@ -663,34 +668,35 @@ def calc_metric(scores_list, y_list, epoch, p, train_mode='Training'):
     else:
         name1 = 'conf_err_val_epoch_'
         name2 = 'conf_acc_val_epoch_'
-    torch.save(conf_mat_tensor[err_idx], p.log_path + '/' + name1 + str_epoch + '.pt')
-    torch.save(conf_mat_tensor[acc_idx], p.log_path + '/' + name2 + str_epoch + '.pt')
-    res2 = torch.clone(res_orig)
-    # paint orange res2[res2>= thresh[err_idx]] and blue res2[res < thresh[err_idx]], x_axis is res2 itself. add dashed
-    # line of optimal threshold. Do the same for accuracy, do it wuth subplot
-    sns.histplot(x=res2, hue=y, bins=50)  # , stat='probability', bins=int(np.ceil(0.4*len(y))))
-    plt.axvline(x=thresh[acc_idx], color='r', linestyle='dashed')
-    # plt.plot(thresh[err_idx] * np.ones(20), np.linspace(0, 0.1, 20), thresh[acc_idx] * np.ones(20), np.linspace(0, 0.1, 20))
-    if train_mode == 'Training':
-        name1 = '/histo_train_epoch_'
-        name2 = '/err_acc_train_epoch_'
-    else:
-        name1 = '/histo_val_epoch_'
-        name2 = '/err_val_epoch_'
-    plt.xlabel('Cosine similarity [N.U]')
-    plt.title('{} mode: ACC = {:.2f}%, tr = {:.2f}'.format(train_mode, 100 * best_acc, thresh[acc_idx]))
-    plt.savefig(p.log_path + name1 + str_epoch + '.png')
-    plt.close()
-    # if np.mod(epoch, 10) == 0:
-    plt.plot(thresh, far, thresh, frr)  # , thresh, acc)
-    plt.legend(['FAR', 'FRR'])  # , 'ACC'])
-    # plt.title('{} mode: ERR = {:.2f}%, tr = {:.2f}, ACC = {:.2f}%, tr = {:.2f}'.format(train_mode, 100*err, thresh[err_idx], 100*best_acc, thresh[acc_idx]))
-    plt.xlabel('Cosine similarity [N.U]')
-    plt.ylabel('Error [N.U]')
-    plt.title('{} mode: ERR = {:.2f}%, tr = {:.2f}'.format(train_mode, 100 * err, thresh[err_idx]))
-    plt.savefig(p.log_path + name2 + str_epoch + '.png')
-    plt.close()
-    # plt.show()
+    if epoch == p.num_epochs:
+        torch.save(conf_mat_tensor[err_idx], p.log_path + '/' + name1 + str_epoch + '.pt')
+        torch.save(conf_mat_tensor[acc_idx], p.log_path + '/' + name2 + str_epoch + '.pt')
+        res2 = torch.clone(res_orig)
+        # paint orange res2[res2>= thresh[err_idx]] and blue res2[res < thresh[err_idx]], x_axis is res2 itself. add dashed
+        # line of optimal threshold. Do the same for accuracy, do it wuth subplot
+        sns.histplot(x=res2, hue=y, bins=50)  # , stat='probability', bins=int(np.ceil(0.4*len(y))))
+        plt.axvline(x=thresh[acc_idx], color='r', linestyle='dashed')
+        # plt.plot(thresh[err_idx] * np.ones(20), np.linspace(0, 0.1, 20), thresh[acc_idx] * np.ones(20), np.linspace(0, 0.1, 20))
+        if train_mode == 'Training':
+            name1 = '/histo_train_epoch_'
+            name2 = '/err_acc_train_epoch_'
+        else:
+            name1 = '/histo_val_epoch_'
+            name2 = '/err_val_epoch_'
+        plt.xlabel('Cosine similarity [N.U]')
+        plt.title('{} mode: ACC = {:.2f}%, tr = {:.2f}'.format(train_mode, 100 * best_acc, thresh[acc_idx]))
+        plt.savefig(p.log_path + name1 + str_epoch + '.png')
+        plt.close()
+        # if np.mod(epoch, 10) == 0:
+        plt.plot(thresh, far, thresh, frr)  # , thresh, acc)
+        plt.legend(['FAR', 'FRR'])  # , 'ACC'])
+        # plt.title('{} mode: ERR = {:.2f}%, tr = {:.2f}, ACC = {:.2f}%, tr = {:.2f}'.format(train_mode, 100*err, thresh[err_idx], 100*best_acc, thresh[acc_idx]))
+        plt.xlabel('Cosine similarity [N.U]')
+        plt.ylabel('Error [N.U]')
+        plt.title('{} mode: ERR = {:.2f}%, tr = {:.2f}'.format(train_mode, 100 * err, thresh[err_idx]))
+        plt.savefig(p.log_path + name2 + str_epoch + '.png')
+        plt.close()
+        # plt.show()
     return err, best_acc, conf.to(scores.device), y.to(scores.device)
 
 
@@ -708,3 +714,5 @@ def write2txt(lines, pth, p):
     lines += ['{} = {}'.format(attr, value) for attr, value in vars(p).items()]
     with open(pth + '/README.txt', 'w') as f:
         f.write('\n'.join(lines))
+
+

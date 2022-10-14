@@ -23,6 +23,7 @@ class ProSet:
         self.entity = "morandv_team"  # wandb init
         self.med_mode = 'c'  # control ('c'), abk ('a') or both ('both')
         self.log_path = '/home/smorandv/ac8_and_aging_NEW/ac8_and_aging/logs/'
+        self.mkdir = False
         self.n_train = None
         self.n_val = None
         self.n_test = None
