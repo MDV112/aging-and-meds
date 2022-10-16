@@ -154,9 +154,3 @@ class HRVDataset(Dataset):
 
 class TE2TDataset(Dataset):
     pass
-
-# if __name__ == '__main__':
-#     empty_parser = argparse.ArgumentParser()
-#     parser = init_parser(parent=empty_parser)
-#     run_config = parser.parse_args()  # parse args from cli
-#     a=1

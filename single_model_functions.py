@@ -505,7 +505,7 @@ def train_batches(model, p, epoch, *args) -> float:
     # wandb.log({'learning_rate':scheduler.get_last_lr()})
     if p.calc_metric:
         err, best_acc, conf, y = calc_metric(scores_list, y_list, epoch, p)
-        error_analysis(dataloader1, dataloader2, conf, y)
+        # error_analysis(dataloader1, dataloader2, conf, y)
         return running_loss, err, best_acc
     return running_loss
 
@@ -584,7 +584,9 @@ def eval_batches(model, p, epoch, *args) -> float:
             scores_list.append(0.5 * (res_temp + 1))  # making the cosine similarity as probability
             y_list.append(y_temp)
         if p.calc_metric:
-            err, best_acc, conf, y = calc_metric(scores_list, y_list, epoch, p, train_mode='Testing')
+            err, best_acc, best_th, y = calc_metric(scores_list, y_list, epoch, p, train_mode='Testing')
+            if epoch == p.num_epochs:
+                error_analysis(dataloader1, dataloader2, model, best_th, p)
             return running_loss, err, best_acc
     return running_loss
 
@@ -656,6 +658,8 @@ def calc_metric(scores_list, y_list, epoch, p, train_mode='Training'):
                                                                                                                       acc_idx] +
                                                                                                                   far[
                                                                                                                       acc_idx])))
+    best_th = thresh[acc_idx]
+
     print(conf_mat_tensor[acc_idx])
 
     if epoch < 10:
@@ -697,15 +701,40 @@ def calc_metric(scores_list, y_list, epoch, p, train_mode='Training'):
         plt.savefig(p.log_path + name2 + str_epoch + '.png')
         plt.close()
         # plt.show()
-    return err, best_acc, conf.to(scores.device), y.to(scores.device)
+    return err, best_acc, best_th.to(scores.device), y.to(scores.device)
 
 
-def error_analysis(dataloader1, dataloader2, conf, y):
-    # wrong_pairs = (dataloader1.dataset[conf == 0], dataloader2.dataset[conf == 0])
-    # misrejected = (wrong_pairs[0][y == 1], wrong_pairs[1][y == 1])  # meaning they are the same but predicted that they are not
-    # misaccepted = (wrong_pairs[0][y == 0], wrong_pairs[1][y == 0])
-
-    pass
+def error_analysis(dataloader1, dataloader2, model, best_th, p):
+    misrejected_pairs = []
+    misaccepted_pairs = []
+    correctly_rejected_pairs = []
+    correctly_accepted_pairs = []
+    with torch.no_grad():
+        for i, data in enumerate(tqdm(zip(dataloader1, dataloader2), total=len(dataloader1)), 0):
+            # get the inputs
+            inputs1, labels1 = data[0]
+            inputs2, labels2 = data[1]
+            # send them to device
+            inputs1 = inputs1.to(p.device)
+            labels1 = labels1.to(p.device)
+            inputs2 = inputs2.to(p.device)
+            labels2 = labels2.to(p.device)
+            outputs1 = model(inputs1)
+            outputs2 = model(inputs2)
+            res_temp, y_temp = cosine_loss(outputs1, outputs2, labels1, labels2, flag=1, lmbda=p.lmbda, b=p.b)
+            res2 = torch.clone(res_temp)
+            res2[res_temp >= best_th] = 1
+            res2[res_temp < best_th] = 0
+            conf = (res2 == y_temp)
+            misrejected = torch.argwhere(torch.logical_and((conf==False), (y_temp==1))).squeeze()  # meaning they are the same but predicted that they are not
+            misaccepted = torch.argwhere(torch.logical_and((conf==False), (y_temp==0))).squeeze()
+            correctly_rejected = torch.argwhere(torch.logical_and((conf==True), (y_temp==0))).squeeze()
+            correctly_accepted = torch.argwhere(torch.logical_and((conf==True), (y_temp==1))).squeeze()
+            misrejected_pairs.append((inputs1[misrejected], inputs2[misrejected]))
+            misaccepted_pairs.append((inputs1[misaccepted], inputs2[misaccepted]))
+            correctly_rejected_pairs.append((inputs1[correctly_rejected], inputs2[correctly_rejected]))
+            correctly_accepted_pairs.append((inputs1[correctly_accepted], inputs2[correctly_accepted]))
+    a=1
 
 
 def write2txt(lines, pth, p):

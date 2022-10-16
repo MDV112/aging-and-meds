@@ -95,7 +95,7 @@ if __name__ == '__main__':
         exp_name = ['abk_min_val_loss','control_min_val_loss','both_min_val_loss','abk_max_val_acc','control_max_val_acc',
                     'control_max_val_acc'] # for now we take only the max val_acc values and not the highest mean
         # chosen_epoch = [80, 200, 319, 274, 410, 10]
-        hyperparameter_dict = {'abk_min_val_loss': dict(num_epochs = 80, b = -0.5928304672016774, batch_size = 16, drop_out = 0.33817387726694303,
+        hyperparameter_dict = {'abk_min_val_loss': dict(num_epochs = 3, b = -0.5928304672016774, batch_size = 16, drop_out = 0.33817387726694303,
                                                         ker_size = 30, lmbda = 0.15788530065565576, lr = 2.779077656310891e-07,
                                                         med_mode = 'a', momentum = 0.6971956087960214, weight_decay = 9.85273609898957),
                                'control_min_val_loss': dict(num_epochs = 200, b = 0.4759263501595812, batch_size = 8, drop_out = 0.12609304729484835,
