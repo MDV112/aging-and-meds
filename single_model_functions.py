@@ -229,6 +229,21 @@ def scale_dataset(*args, input_scaler=None, mode=0, should_scale: bool = False) 
             return args
 
 
+def rearrange_dataset(p, *args, mode=0) -> tuple:
+    if len(args) == 2:
+        train_data = args[0]
+        test_data = args[1]
+    mixed_x_data = np.vstack((train_data.x, test_data.x))
+    mixed_y_data = np.vstack((train_data.y, test_data.y))
+    x_train, x_val, y_train, y_val = train_test_split(mixed_x_data, mixed_y_data, test_size=p.val_size,
+                                                      random_state=42)  # random_state is to make sure both dataloaders will have the same split and thus we can preserve 50%-50% tagging using HRVDataset __getitem__
+    p.n_train = x_train.shape[0]
+    p.n_val = x_val.shape[0]
+    train_dataset = HRVDataset(x_train, y_train, mode=mode)
+    test_dataset = HRVDataset(x_val, y_val, mode=mode)
+    return train_dataset, test_dataset
+
+
 def train_model(model: object, p: object, *args):
     """
     Training the model.
@@ -730,10 +745,32 @@ def error_analysis(dataloader1, dataloader2, model, best_th, p):
             misaccepted = torch.argwhere(torch.logical_and((conf==False), (y_temp==0))).squeeze()
             correctly_rejected = torch.argwhere(torch.logical_and((conf==True), (y_temp==0))).squeeze()
             correctly_accepted = torch.argwhere(torch.logical_and((conf==True), (y_temp==1))).squeeze()
+            # todo: check what happens if one of the above is an empty tensor
             misrejected_pairs.append((inputs1[misrejected], inputs2[misrejected]))
             misaccepted_pairs.append((inputs1[misaccepted], inputs2[misaccepted]))
             correctly_rejected_pairs.append((inputs1[correctly_rejected], inputs2[correctly_rejected]))
             correctly_accepted_pairs.append((inputs1[correctly_accepted], inputs2[correctly_accepted]))
+        # rr_diff = dict(misrejected_pairs=[], misaccepted_pairs=[], correctly_rejected_pairs=[], correctly_accepted_pairs=[])
+        rr_diff_mean = dict([(0, []), (1, []), (2, []), (3, [])])
+        for pair_tup in zip(misrejected_pairs, misaccepted_pairs, correctly_rejected_pairs, correctly_accepted_pairs):
+            for jj in range(len(pair_tup)):
+                if pair_tup[jj][0].nelement() > 0:
+                    # rr_diff = pair_tup[jj][0] - pair_tup[jj][1]
+                    if pair_tup[jj][0].ndim < 3:
+                        rr_diff_mean[jj].append(torch.abs(60/pair_tup[jj][0].mean(axis=1).squeeze()-60/pair_tup[jj][1].mean(axis=1).squeeze()))
+                    else:
+                        rr_diff_mean[jj].append(torch.abs(60/pair_tup[jj][0].mean(axis=2).squeeze()-60/pair_tup[jj][1].mean(axis=2).squeeze()))
+        f11 = lambda tensor_list: [val.unsqueeze(dim=0) if val.ndim < 1 else val for val in tensor_list]
+        for key in rr_diff_mean:
+            rr_diff_mean[key] = f11(rr_diff_mean[key])
+            rr_diff_mean[key] = torch.cat(rr_diff_mean[key])
+    ax = sns.boxplot(data=[rr_diff_mean[0].cpu(),rr_diff_mean[1].cpu(),rr_diff_mean[2].cpu(),rr_diff_mean[3].cpu()])
+    ax.set_xticklabels(["misrejected", "misaccepted", "corr_rejected", "corr_accepted"])
+    ax.set_ylabel('Avg. HR difference')
+    plt.show()
+    plt.savefig(p.log_path + 'HR_diff.png', ax)
+    plt.close()
+    # plt.show()
     a=1
 
 
