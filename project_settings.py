@@ -2,6 +2,7 @@ import numpy as np
 import torch
 from torch.utils.data import Dataset
 import argparse
+import random
 
 def init_parser(parent, add_help=False):
     """
@@ -21,7 +22,7 @@ def init_parser(parent, add_help=False):
 class ProSet:
     def __init__(self, read_txt=False, txt_path=None):
         self.entity = "morandv_team"  # wandb init
-        self.med_mode = 'c'  # control ('c'), abk ('a') or both ('both')
+        self.med_mode = 'both'  # control ('c'), abk ('a') or both ('both')
         self.log_path = '/home/smorandv/ac8_and_aging_NEW/ac8_and_aging/logs/'
         self.mkdir = False
         self.n_train = None
@@ -41,9 +42,11 @@ class ProSet:
         # splitting:
         self.proper = True
         self.remove_mean = False
+        self.mu = None
         self.test_mode = False
         self.val_size = 0.2
         self.seed = 42
+        self.r = None
         self.samp_per_id = 60
         self.human_flag = False
         self.wandb_enable = True
@@ -83,6 +86,7 @@ class ProSet:
         self.pool_ker_size = 2
         self.drop_out = 0.25  # 0.15
         self.num_hidden = [128, 64, 32]  # [128, 64, 32]
+        self.run_saved_models = True
         # gpu:
         self.cpu = False
         self.mult_gpu = False
@@ -113,11 +117,14 @@ class ProSet:
 
 class HRVDataset(Dataset):
 
-    def __init__(self, x, y, mode=0):
+    def __init__(self, x, y, p, mode=0):
         # self.x = x.clone().detach().requires_grad_(True)
         super().__init__()
         self.x = x.copy()
         self.y = y.copy()
+        self.p = p
+        np.random.seed(p.seed)
+        self.r = np.random.randint(0, 2, x.shape[0])
         self.mode = mode
 
 
@@ -133,19 +140,22 @@ class HRVDataset(Dataset):
         :param mode: used for second dataset to have 50% of the mice compared to the first dataset to be different
         :return:
         """
-        # np.random.seed(5)
+
         if self.mode:
             y = self.y[idx, 0]
-            r = np.random.randint(2)  # 50%-50%
+            r = self.r[idx]  # 50%-50%
+            np.random.seed(self.p.seed)
             if r:  # find negative example
                 neg_list = np.argwhere(self.y[:, 0] != y)
                 idx = neg_list[np.random.randint(0, len(neg_list))].item()
             else:
                 idx_temp = None
                 pos_list = np.argwhere(self.y[:, 0] == y)
-                while (idx_temp is None) or (idx_temp == idx):  # avoid comparing the same signals
-                    idx_temp = pos_list[np.random.randint(0, len(pos_list))].item()
-                idx = idx_temp
+                if pos_list.shape[0] != 1:  # This is necessary since sometime there is only a single time window for a ,ouse and thus it would have to compare the time window to itself
+                    while (idx_temp is None) or (idx_temp == idx):  # avoid comparing the same signals
+                        idx_temp = pos_list[np.random.randint(0, len(pos_list))].item()
+                        # print(pos_list)
+                    idx = idx_temp
         x = self.x[idx:idx+1, :]
         y = self.y[idx, :]
         sample = (torch.from_numpy(x).requires_grad_(True).type(torch.FloatTensor), torch.from_numpy(y).type(torch.IntTensor))  # just here convert to torch

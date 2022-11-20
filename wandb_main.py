@@ -53,10 +53,10 @@ if __name__ == '__main__':
             p.test_path = p.train_path
         tr_dataset_1 = load_datasets(p.train_path, p, human_flag=p.human_flag, samp_per_id=p.samp_per_id)
         x_tr, y_tr, x_val, y_val = split_dataset(tr_dataset_1, p)
-        tr_dataset_1, val_dataset_1, scaler1 = scale_dataset(x_tr, y_tr, x_val, y_val)
+        tr_dataset_1, val_dataset_1, scaler1 = scale_dataset(p, x_tr, y_tr, x_val, y_val)
         tr_dataset_2 = load_datasets(p.train_path, p, mode=1, human_flag=p.human_flag, samp_per_id=p.samp_per_id)
         x_tr, y_tr, x_val, y_val = split_dataset(tr_dataset_2, p)
-        tr_dataset_2, val_dataset_2, scaler2 = scale_dataset(x_tr, y_tr, x_val, y_val, mode=1)
+        tr_dataset_2, val_dataset_2, scaler2 = scale_dataset(p, x_tr, y_tr, x_val, y_val, mode=1)
 
         torch.manual_seed(p.seed)
 
@@ -92,27 +92,38 @@ if __name__ == '__main__':
 
     ####### TAKING FULL TRAINING SET AND RUN with TEST
     else:
+        if p.run_saved_models:
+            print('Notice: loaded models are used')
+
         exp_name = ['abk_min_val_loss','control_min_val_loss','both_min_val_loss','abk_max_val_acc','control_max_val_acc',
                     'control_max_val_acc'] # for now we take only the max val_acc values and not the highest mean
         # chosen_epoch = [80, 200, 319, 274, 410, 10]
-        hyperparameter_dict = {'abk_min_val_loss': dict(num_epochs = 80, b = -0.5928304672016774, batch_size = 16, drop_out = 0.33817387726694303,
-                                                        ker_size = 30, lmbda = 0.15788530065565576, lr = 2.779077656310891e-07,
-                                                        med_mode = 'a', momentum = 0.6971956087960214, weight_decay = 9.85273609898957),
-                               'control_min_val_loss': dict(num_epochs = 200, b = 0.4759263501595812, batch_size = 8, drop_out = 0.12609304729484835,
-                                                            ker_size = 30, lmbda = 9.613353037151509, lr = 3.435639818473589e-07,
-                                                            med_mode = 'c', momentum = 0.755330893385039, weight_decay = 1.1752777398646077),
+
+
+        saved_models_path = ['/home/smorandv/ac8_and_aging_NEW/ac8_and_aging/logs/Nov-16-2022_17_57_41/',
+                             '/home/smorandv/ac8_and_aging_NEW/ac8_and_aging/logs/Nov-16-2022_18_02_17/',
+                             '/home/smorandv/ac8_and_aging_NEW/ac8_and_aging/logs/Nov-16-2022_18_07_51/']
+        model_type = ['final_model.pt']
+        hyperparameter_dict = {'abk_min_val_loss': dict(num_epochs=80, b=-0.5928304672016774, batch_size=16, drop_out=0.33817387726694303,
+                                 ker_size=30, lmbda=0.15788530065565576, lr=2.779077656310891e-07,
+                                 med_mode='a', momentum=0.6971956087960214, weight_decay=9.85273609898957),
+                                'control_min_val_loss': dict(num_epochs=200, b=0.4759263501595812, batch_size=8, drop_out=0.12609304729484835,
+                                     ker_size=30, lmbda=9.613353037151509, lr=3.435639818473589e-07,
+                                     med_mode='c', momentum=0.755330893385039, weight_decay=1.1752777398646077),
+
                                'both_min_val_loss': dict(num_epochs = 319, b = 0.4770143418377288, batch_size = 128, drop_out = 0.30722983323578223,
                                                          ker_size = 10, lmbda = 1.3150498005398192, lr = 4.078531801074058e-07,
-                                                         med_mode = 'both', momentum = 0.10744132018019596, weight_decay = 0.17254862160126153),
-                               'abk_max_val_acc': dict(num_epochs = 274, b = -0.9562638379209744, batch_size = 128, drop_out = 0.17056978300508333,
-                                                       ker_size = 10, lmbda = 3.116931692726408, lr = 4.052054605371503e-09,
-                                                       med_mode = 'a', momentum = 0.1242686110085278, weight_decay = 9.940616806701842),
-                               'control_max_val_acc': dict(num_epochs = 410, b = -0.35933104620886336, batch_size = 8, drop_out = 0.24671384595337603,
-                                                           ker_size = 30, lmbda = 0.0002452993185841912, lr = 2.2402385543478617e-07,
-                                                           med_mode = 'c', momentum = 0.3939188582826322, weight_decay = 7.947725851063474),
-                               'both_max_val_acc': dict(num_epochs = 10, b = 0.49879753665203497, batch_size = 64, drop_out = 0.372252749360447,
-                                                        ker_size = 10, lmbda = 0.17068996497656697, lr = 3.827153538598344e-07,
-                                                        med_mode = 'both', momentum = 0.3889915168297784, weight_decay = 0.1554402334425353)}
+                                                         med_mode = 'both', momentum = 0.10744132018019596, weight_decay = 0.17254862160126153)}
+
+                               # 'abk_max_val_acc': dict(num_epochs = 274, b = -0.9562638379209744, batch_size = 128, drop_out = 0.17056978300508333,
+                               #                         ker_size = 10, lmbda = 3.116931692726408, lr = 4.052054605371503e-09,
+                               #                         med_mode = 'a', momentum = 0.1242686110085278, weight_decay = 9.940616806701842),
+                               # 'control_max_val_acc': dict(num_epochs = 410, b = -0.35933104620886336, batch_size = 8, drop_out = 0.24671384595337603,
+                               #                             ker_size = 30, lmbda = 0.0002452993185841912, lr = 2.2402385543478617e-07,
+                               #                             med_mode = 'c', momentum = 0.3939188582826322, weight_decay = 7.947725851063474),
+                               # 'both_max_val_acc': dict(num_epochs = 10, b = 0.49879753665203497, batch_size = 64, drop_out = 0.372252749360447,
+                               #                          ker_size = 10, lmbda = 0.17068996497656697, lr = 3.827153538598344e-07,
+                               #                          med_mode = 'both', momentum = 0.3889915168297784, weight_decay = 0.1554402334425353)}
         lines = []
         for idx_exp, exp in enumerate(hyperparameter_dict.keys()):
             for var_name in p.__dict__:
@@ -126,12 +137,14 @@ if __name__ == '__main__':
                 p.test_path = p.train_path
             tr_dataset_1 = load_datasets(p.train_path, p, human_flag=p.human_flag, samp_per_id=p.samp_per_id)
             ts_dataset_1 = load_datasets(p.test_path, p, human_flag=p.human_flag, samp_per_id=p.samp_per_id, train_mode=False)
-            tr_dataset_1, ts_dataset_1 = scale_dataset(tr_dataset_1, ts_dataset_1, should_scale=False)
-            tr_dataset_1, ts_dataset_1 = rearrange_dataset(p, tr_dataset_1, ts_dataset_1)
+            tr_dataset_1, ts_dataset_1 = scale_dataset(p, tr_dataset_1, ts_dataset_1, should_scale=False)
+            # todo: notice the following line of rearranging. Consider dropping it if you don't want the whole dataset with "inproper" partition
+            # tr_dataset_1, ts_dataset_1 = rearrange_dataset(p, tr_dataset_1, ts_dataset_1)
             tr_dataset_2 = load_datasets(p.train_path, p, human_flag=p.human_flag, samp_per_id=p.samp_per_id, mode=1)
             ts_dataset_2 = load_datasets(p.test_path, p, human_flag=p.human_flag, samp_per_id=p.samp_per_id, train_mode=False, mode=1)
-            tr_dataset_2, ts_dataset_2 = scale_dataset(tr_dataset_2, ts_dataset_2, mode=1, should_scale=False)
-            tr_dataset_2, ts_dataset_2 = rearrange_dataset(p, tr_dataset_2, ts_dataset_2, mode=1)
+            tr_dataset_2, ts_dataset_2 = scale_dataset(p, tr_dataset_2, ts_dataset_2, mode=1, should_scale=False)
+            # todo: notice the following line of rearranging. Consider dropping it if you don't want the whole dataset with "inproper" partition
+            # tr_dataset_2, ts_dataset_2 = rearrange_dataset(p, tr_dataset_2, ts_dataset_2, mode=1)
 
             acc_vector = torch.zeros(1)
             for i in range(1):
@@ -157,11 +170,14 @@ if __name__ == '__main__':
                     ts_dataset_1, batch_size=p.batch_size, shuffle=False, num_workers=0, drop_last=True)
                 tsloader2 = torch.utils.data.DataLoader(
                     ts_dataset_2, batch_size=p.batch_size, shuffle=False, num_workers=0, drop_last=True)
-
-                train_model(model, p, optimizer, trainloader1, trainloader2, tsloader1, tsloader2)
-                _, _, acc_vector[i] = eval_model(model, p, 1, tsloader1, tsloader2)
-                if p.wandb_enable:
-                    wandb.finish()
+                if p.run_saved_models:
+                    model = torch.load(saved_models_path[idx_exp] + model_type[0])
+                    _, _, acc_vector[i] = eval_model(model, p, 1, tsloader1, tsloader2)
+                else:
+                    train_model(model, p, optimizer, trainloader1, trainloader2, tsloader1, tsloader2)
+                    _, _, acc_vector[i] = eval_model(model, p, 1, tsloader1, tsloader2)
+                    if p.wandb_enable:
+                        wandb.finish()
             lines += ['In exp. {}, mean test results were  {:.2f}% with {:.2f}% std'.format(exp, 100*acc_vector.nanmean(),
                                                                                             100*acc_vector.std())]
         with open(p.log_path + '/README.txt', 'w') as f:

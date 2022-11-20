@@ -946,7 +946,7 @@ class Advrtset(nn.Module):
                     # linear layer
                     out = self.conv[i](out)  # NOTICE THAT HERE IT IS NOT CONVOLUTION BUT MLP
                 # out = self.soft_max(out)
-
+            # print(out.shape)
             return out
         else:
             ##### This one performes dsu either way (but not on linear layers)

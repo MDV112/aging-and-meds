@@ -77,22 +77,26 @@ def load_datasets(full_pickle_path: str, p: object, mode: int = 0, train_mode: b
                 p.n_train = x.shape[0]
             else:
                 p.n_test = x.shape[0]
-            dataset = HRVDataset(x, y, mode=mode)
+            dataset = HRVDataset(x, y, p, mode=mode)
             return dataset
         with open(full_pickle_path, 'rb') as f:
             e = pickle.load(f)
             if train_mode:
                 x = e.x_train_specific
                 if p.remove_mean:
-                    x = x - x.mean(axis=0)
+                    p.mu = x.mean()
+                    x = x - p.mu
+                    # x = x - x.mean(axis=0)
                     # x = x - x.min()
                 y = e.y_train_specific
                 p.train_ages = np.unique(y['age'])
+                p.n_individuals_train = len(np.unique(y['id']))
                 print('Ages used in training set are {}'.format(np.unique(y['age'])))
             else:
                 x = e.x_test_specific
                 if p.remove_mean:
-                    x = x - x.mean(axis=0)
+                    x = x - p.mu
+                    # x = x - x.mean(axis=0)
                     # x = x - x.min(axis=0)
                 y = e.y_test_specific
                 p.test_ages = np.unique(y['age'])
@@ -111,25 +115,26 @@ def load_datasets(full_pickle_path: str, p: object, mode: int = 0, train_mode: b
         y_ca = np.concatenate((y_c, y_a))
         x_ca_T, y_ca = shuffle(x_ca.T, y_ca, random_state=0)
         x_ca = x_ca_T.T
+
         if p.med_mode == 'c':
             if train_mode:
                 p.n_train = x_c.shape[1]
             else:
                 p.n_test = x_c.shape[1]
 
-            dataset = HRVDataset(x_c.T, y_c, mode=mode)  # transpose should fit HRVDataset
+            dataset = HRVDataset(x_c.T, y_c, p, mode=mode)  # transpose should fit HRVDataset
         elif p.med_mode == 'a':
             if train_mode:
                 p.n_train = x_a.shape[1]
             else:
                 p.n_test = x_a.shape[1]
-            dataset = HRVDataset(x_a.T, y_a, mode=mode)  # transpose should fit HRVDataset
+            dataset = HRVDataset(x_a.T, y_a, p, mode=mode)  # transpose should fit HRVDataset
         elif p.med_mode == 'both':
             if train_mode:
                 p.n_train = x_ca.shape[1]
             else:
                 p.n_test = x_ca.shape[1]
-            dataset = HRVDataset(x_ca.T, y_ca, mode=mode)  # transpose should fit HRVDataset
+            dataset = HRVDataset(x_ca.T, y_ca, p, mode=mode)  # transpose should fit HRVDataset
         else:  # other medications
             raise NotImplementedError
     else:  # Koopman HRV
@@ -144,13 +149,13 @@ def load_datasets(full_pickle_path: str, p: object, mode: int = 0, train_mode: b
             if len(p.feat2drop) != 0:
                 x_c.drop(p.feat2drop, axis=1, inplace=True)
             np_dataset = np.array(x_c.values, dtype=np.float)
-            dataset = HRVDataset(np_dataset, label_dataset, mode=mode)
+            dataset = HRVDataset(np_dataset, label_dataset, p, mode=mode)
         elif p.med_mode == 'a':
             label_dataset = y_a
             if len(p.feat2drop) != 0:
                 x_a.drop(p.feat2drop, axis=1, inplace=True)
             np_dataset = np.array(x_a.values, dtype=np.float)
-            dataset = HRVDataset(np_dataset, label_dataset, mode=mode)
+            dataset = HRVDataset(np_dataset, label_dataset, p, mode=mode)
         else:  # other medications
             raise NotImplementedError
     return dataset
@@ -188,7 +193,7 @@ def split_dataset(dataset: object, p: object, seed: int = 42) -> tuple:
     return x_train, y_train, x_val, y_val
 
 
-def scale_dataset(*args, input_scaler=None, mode=0, should_scale: bool = False) -> tuple:
+def scale_dataset(p, *args, input_scaler=None, mode=0, should_scale: bool = False) -> tuple:
     """
     Scaling the data properly according to the training set. If split is made, then scaling is performed for training
     set and then validation and testing are scaled by the same fitted scaler. This means that we call the function twice;
@@ -213,7 +218,7 @@ def scale_dataset(*args, input_scaler=None, mode=0, should_scale: bool = False) 
             else:  # todo: remove mean rr from every example
                 x_train = args[0]
                 x_val = args[2]
-            return HRVDataset(x_train, args[1], mode=mode), HRVDataset(x_val, args[3], mode=mode), scaler
+            return HRVDataset(x_train, args[1], p, mode=mode), HRVDataset(x_val, args[3], p, mode=mode), scaler
         elif len(args) == 2:  # HRVdataset(train) and HRVdataset(test)
             if should_scale:
                 args[0].x = scaler.fit_transform(
@@ -236,11 +241,13 @@ def rearrange_dataset(p, *args, mode=0) -> tuple:
     mixed_x_data = np.vstack((train_data.x, test_data.x))
     mixed_y_data = np.vstack((train_data.y, test_data.y))
     x_train, x_val, y_train, y_val = train_test_split(mixed_x_data, mixed_y_data, test_size=p.val_size,
-                                                      random_state=42)  # random_state is to make sure both dataloaders will have the same split and thus we can preserve 50%-50% tagging using HRVDataset __getitem__
+                                                      random_state=p.seed)  # random_state is to make sure both dataloaders will have the same split and thus we can preserve 50%-50% tagging using HRVDataset __getitem__
     p.n_train = x_train.shape[0]
-    p.n_val = x_val.shape[0]
-    train_dataset = HRVDataset(x_train, y_train, mode=mode)
-    test_dataset = HRVDataset(x_val, y_val, mode=mode)
+    p.n_test = x_val.shape[0]
+    p.r = np.random.randint(0, 2, p.n_train)
+    train_dataset = HRVDataset(x_train, y_train, p, mode=mode)
+    p.r = np.random.randint(0, 2, p.n_test)
+    test_dataset = HRVDataset(x_val, y_val, p, mode=mode)
     return train_dataset, test_dataset
 
 
@@ -319,6 +326,20 @@ def train_epochs(model: object, p: object, *args):
                     print(p.error_txt)
                     break
             ############## SAVING BEST MODELS ########################
+            if val_err_vector[epoch - 1] < best_val_ERR:
+                best_val_ERR = val_err_vector[epoch - 1]
+                torch.save(copy.deepcopy(model), pth + '/best_ERR_model.pt')
+            if val_acc_vector[epoch - 1] > best_val_acc:
+                best_val_acc = val_acc_vector[epoch - 1]
+                torch.save(copy.deepcopy(model), pth + '/best_ACC_model.pt')
+            if np.abs(val_err_vector[epoch - 1] - training_err_vector[epoch - 1]) < best_ERR_diff:
+                best_ERR_diff = np.abs(val_err_vector[epoch - 1] - training_err_vector[epoch - 1])
+                torch.save(copy.deepcopy(model), pth + '/best_ERR_diff_model.pt')
+            if np.abs(val_acc_vector[epoch - 1] - train_acc_vector[epoch - 1]) < best_ACC_diff:
+                best_ACC_diff = np.abs(val_acc_vector[epoch - 1] - train_acc_vector[epoch - 1])
+                torch.save(copy.deepcopy(model), pth + '/best_ACC_diff_model.pt')
+            if epoch == p.num_epochs:
+                torch.save(copy.deepcopy(model), pth + '/final_model.pt')
             # if val_err_vector[epoch - 1] < best_val_ERR:
             #     best_val_ERR = val_err_vector[epoch - 1]
             #     torch.save(copy.deepcopy(model.state_dict()), pth + '/best_ERR_model.pt')
@@ -567,6 +588,7 @@ def eval_batches(model, p, epoch, *args) -> float:
             labels1 = labels1.to(p.device)
             inputs2 = inputs2.to(p.device)
             labels2 = labels2.to(p.device)
+            # print('inputs1:{},inputs2:{},labels1:{},labels2:{}'.format(inputs1.shape, inputs2.shape, labels1.shape, labels2.shape))
 
             if epoch > p.pretraining_epoch:
                 # outputs1 = model(inputs1, flag_DSU=p.flag_DSU)  # forward pass
@@ -601,7 +623,8 @@ def eval_batches(model, p, epoch, *args) -> float:
         if p.calc_metric:
             err, best_acc, best_th, y = calc_metric(scores_list, y_list, epoch, p, train_mode='Testing')
             if epoch == p.num_epochs:
-                error_analysis(dataloader1, dataloader2, model, best_th, p)
+                # error_analysis(dataloader1, dataloader2, model, best_th, p)
+                pass
             return running_loss, err, best_acc
     return running_loss
 
@@ -757,16 +780,21 @@ def error_analysis(dataloader1, dataloader2, model, best_th, p):
                 if pair_tup[jj][0].nelement() > 0:
                     # rr_diff = pair_tup[jj][0] - pair_tup[jj][1]
                     if pair_tup[jj][0].ndim < 3:
-                        rr_diff_mean[jj].append(torch.abs(60/pair_tup[jj][0].mean(axis=1).squeeze()-60/pair_tup[jj][1].mean(axis=1).squeeze()))
+                        rr_diff_mean[jj].append(torch.abs(60/(p.mu + pair_tup[jj][0].mean(axis=1).squeeze())-60/(p.mu + pair_tup[jj][1].mean(axis=1).squeeze())))
                     else:
-                        rr_diff_mean[jj].append(torch.abs(60/pair_tup[jj][0].mean(axis=2).squeeze()-60/pair_tup[jj][1].mean(axis=2).squeeze()))
+                        rr_diff_mean[jj].append(torch.abs(60/(p.mu + pair_tup[jj][0].mean(axis=2).squeeze())-60/(p.mu + pair_tup[jj][1].mean(axis=2).squeeze())))
         f11 = lambda tensor_list: [val.unsqueeze(dim=0) if val.ndim < 1 else val for val in tensor_list]
         for key in rr_diff_mean:
             rr_diff_mean[key] = f11(rr_diff_mean[key])
             rr_diff_mean[key] = torch.cat(rr_diff_mean[key])
+            print('Median={:.2f}, Q1={:.2f}, Q3={:.2f}, min={:.2f}, max={:.2f}'.format(torch.median(rr_diff_mean[key]).item(),
+                                                                                       torch.quantile(rr_diff_mean[key], 0.25).item(),
+                                                                                       torch.quantile(rr_diff_mean[key], 0.75).item(),
+                                                                                       torch.min(rr_diff_mean[key]).item(),
+                                                                                       torch.max(rr_diff_mean[key]).item()))
     ax = sns.boxplot(data=[rr_diff_mean[0].cpu(),rr_diff_mean[1].cpu(),rr_diff_mean[2].cpu(),rr_diff_mean[3].cpu()])
     ax.set_xticklabels(["misrejected", "misaccepted", "corr_rejected", "corr_accepted"])
-    ax.set_ylabel('Avg. HR difference')
+    ax.set_ylabel('Avg. HR difference [bpm]')
     plt.show()
     plt.savefig(p.log_path + 'HR_diff.png', ax)
     plt.close()
