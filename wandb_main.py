@@ -28,7 +28,7 @@ if __name__ == '__main__':
     command = "nvidia-smi --query-gpu=memory.free --format=csv"
     memory_free_info = sp.check_output(command.split()).decode('ascii').split('\n')[:-1][1:]
     memory_free_values = [int(x.split()[0]) for i, x in enumerate(memory_free_info)]
-    device_list = [0,1,2,3,4,5,6,7]
+    device_list = [0, 1, 2, 3, 4, 5, 6, 7]
     for device in device_list:
         if memory_free_values[device] > 4000:
             p.device = device
@@ -42,7 +42,12 @@ if __name__ == '__main__':
     #     p = argparse.Namespace(**wandb.config)
     p.device = device
     p.wandb_enable = False
-    p.test_mode = True
+    # p.test_mode = True
+    np.random.seed(p.seed)
+    torch.manual_seed(p.seed)
+    torch.cuda.manual_seed_all(p.seed)
+    torch.backends.cudnn.deterministic = True
+    torch.backends.cudnn.benchmark = False
     if not(p.test_mode):
         print('Med mode is : {}'.format(p.med_mode))
         if p.human_flag:
@@ -54,17 +59,21 @@ if __name__ == '__main__':
         tr_dataset_1 = load_datasets(p.train_path, p, human_flag=p.human_flag, samp_per_id=p.samp_per_id)
         x_tr, y_tr, x_val, y_val = split_dataset(tr_dataset_1, p)
         tr_dataset_1, val_dataset_1, scaler1 = scale_dataset(p, x_tr, y_tr, x_val, y_val)
+        if p.rearrange:
+            tr_dataset_1, val_dataset_1 = rearrange_dataset(p, tr_dataset_1, val_dataset_1)
         tr_dataset_2 = load_datasets(p.train_path, p, mode=1, human_flag=p.human_flag, samp_per_id=p.samp_per_id)
         x_tr, y_tr, x_val, y_val = split_dataset(tr_dataset_2, p)
         tr_dataset_2, val_dataset_2, scaler2 = scale_dataset(p, x_tr, y_tr, x_val, y_val, mode=1)
+        if p.rearrange:
+            tr_dataset_2, val_dataset_2 = rearrange_dataset(p, tr_dataset_2, val_dataset_2, mode=1)
 
-        torch.manual_seed(p.seed)
+        # torch.manual_seed(p.seed)
 
 
-        model = TCN(1,1, layers=[128, 128, 128], ks=30)
-        model = model.to(p.device)
-        # model = Advrtset(tr_dataset_1.x.shape[1], p, ker_size=p.ker_size, stride=p.stride, pool_ker_size=p.pool_ker_size, dial=p.dial,
-        #                  drop_out=p.drop_out, num_chann=p.num_chann, num_hidden=p.num_hidden,).to(p.device)
+        # model = TCN(1,1, layers=[128, 128, 128], ks=30)
+        # model = model.to(p.device)
+        model = Advrtset(tr_dataset_1.x.shape[1], p, ker_size=p.ker_size, stride=p.stride, pool_ker_size=p.pool_ker_size, dial=p.dial,
+                         drop_out=p.drop_out, num_chann=p.num_chann, num_hidden=p.num_hidden,).to(p.device)
         if p.mult_gpu:
             model = nn.DataParallel(model, device_ids=p.device_ids)
 
@@ -91,18 +100,22 @@ if __name__ == '__main__':
 
 
     ####### TAKING FULL TRAINING SET AND RUN with TEST
-    else:
+    else:  # in p.test_mode == True, we can have either TRAINING WITHOUT VALIDATION and then test or use saved models
+        # and evaluate performance.
         if p.run_saved_models:
             print('Notice: loaded models are used')
 
-        exp_name = ['abk_min_val_loss','control_min_val_loss','both_min_val_loss','abk_max_val_acc','control_max_val_acc',
+        exp_name = ['abk_min_val_loss', 'control_min_val_loss', 'both_min_val_loss', 'abk_max_val_acc', 'control_max_val_acc',
                     'control_max_val_acc'] # for now we take only the max val_acc values and not the highest mean
         # chosen_epoch = [80, 200, 319, 274, 410, 10]
 
 
-        saved_models_path = ['/home/smorandv/ac8_and_aging_NEW/ac8_and_aging/logs/Nov-16-2022_17_57_41/',
-                             '/home/smorandv/ac8_and_aging_NEW/ac8_and_aging/logs/Nov-16-2022_18_02_17/',
-                             '/home/smorandv/ac8_and_aging_NEW/ac8_and_aging/logs/Nov-16-2022_18_07_51/']
+        # saved_models_path = ['/home/smorandv/ac8_and_aging_NEW/ac8_and_aging/logs/Nov-16-2022_17_57_41/',
+        #                      '/home/smorandv/ac8_and_aging_NEW/ac8_and_aging/logs/Nov-16-2022_18_02_17/',
+        #                      '/home/smorandv/ac8_and_aging_NEW/ac8_and_aging/logs/Nov-16-2022_18_07_51/']
+        saved_models_path = ['/home/smorandv/ac8_and_aging_NEW/ac8_and_aging/logs/Nov-23-2022_18_39_30/',
+                            '/home/smorandv/ac8_and_aging_NEW/ac8_and_aging/logs/Nov-23-2022_18_44_47/',
+                            '/home/smorandv/ac8_and_aging_NEW/ac8_and_aging/logs/Nov-23-2022_18_50_44/']
         model_type = ['final_model.pt']
         hyperparameter_dict = {'abk_min_val_loss': dict(num_epochs=80, b=-0.5928304672016774, batch_size=16, drop_out=0.33817387726694303,
                                  ker_size=30, lmbda=0.15788530065565576, lr=2.779077656310891e-07,
@@ -111,9 +124,9 @@ if __name__ == '__main__':
                                      ker_size=30, lmbda=9.613353037151509, lr=3.435639818473589e-07,
                                      med_mode='c', momentum=0.755330893385039, weight_decay=1.1752777398646077),
 
-                               'both_min_val_loss': dict(num_epochs = 319, b = 0.4770143418377288, batch_size = 128, drop_out = 0.30722983323578223,
-                                                         ker_size = 10, lmbda = 1.3150498005398192, lr = 4.078531801074058e-07,
-                                                         med_mode = 'both', momentum = 0.10744132018019596, weight_decay = 0.17254862160126153)}
+                               'both_min_val_loss': dict(num_epochs=319, b=0.4770143418377288, batch_size=128, drop_out=0.30722983323578223,
+                                                         ker_size=10, lmbda=1.3150498005398192, lr=4.078531801074058e-07,
+                                                         med_mode='both', momentum=0.10744132018019596, weight_decay=0.17254862160126153)}
 
                                # 'abk_max_val_acc': dict(num_epochs = 274, b = -0.9562638379209744, batch_size = 128, drop_out = 0.17056978300508333,
                                #                         ker_size = 10, lmbda = 3.116931692726408, lr = 4.052054605371503e-09,
@@ -138,13 +151,13 @@ if __name__ == '__main__':
             tr_dataset_1 = load_datasets(p.train_path, p, human_flag=p.human_flag, samp_per_id=p.samp_per_id)
             ts_dataset_1 = load_datasets(p.test_path, p, human_flag=p.human_flag, samp_per_id=p.samp_per_id, train_mode=False)
             tr_dataset_1, ts_dataset_1 = scale_dataset(p, tr_dataset_1, ts_dataset_1, should_scale=False)
-            # todo: notice the following line of rearranging. Consider dropping it if you don't want the whole dataset with "inproper" partition
-            # tr_dataset_1, ts_dataset_1 = rearrange_dataset(p, tr_dataset_1, ts_dataset_1)
+            if p.rearrange:
+                tr_dataset_1, ts_dataset_1 = rearrange_dataset(p, tr_dataset_1, ts_dataset_1)
             tr_dataset_2 = load_datasets(p.train_path, p, human_flag=p.human_flag, samp_per_id=p.samp_per_id, mode=1)
             ts_dataset_2 = load_datasets(p.test_path, p, human_flag=p.human_flag, samp_per_id=p.samp_per_id, train_mode=False, mode=1)
             tr_dataset_2, ts_dataset_2 = scale_dataset(p, tr_dataset_2, ts_dataset_2, mode=1, should_scale=False)
-            # todo: notice the following line of rearranging. Consider dropping it if you don't want the whole dataset with "inproper" partition
-            # tr_dataset_2, ts_dataset_2 = rearrange_dataset(p, tr_dataset_2, ts_dataset_2, mode=1)
+            if p.rearrange:
+                tr_dataset_2, ts_dataset_2 = rearrange_dataset(p, tr_dataset_2, ts_dataset_2, mode=1)
 
             acc_vector = torch.zeros(1)
             for i in range(1):
@@ -171,7 +184,8 @@ if __name__ == '__main__':
                 tsloader2 = torch.utils.data.DataLoader(
                     ts_dataset_2, batch_size=p.batch_size, shuffle=False, num_workers=0, drop_last=True)
                 if p.run_saved_models:
-                    model = torch.load(saved_models_path[idx_exp] + model_type[0])
+                    p.log_path = saved_models_path[idx_exp]
+                    model = torch.load(p.log_path + model_type[0])
                     _, _, acc_vector[i] = eval_model(model, p, 1, tsloader1, tsloader2)
                 else:
                     train_model(model, p, optimizer, trainloader1, trainloader2, tsloader1, tsloader2)

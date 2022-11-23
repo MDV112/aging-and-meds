@@ -43,13 +43,14 @@ class ProSet:
         self.proper = True
         self.remove_mean = False
         self.mu = None
-        self.test_mode = False
+        self.test_mode = True
         self.val_size = 0.2
         self.seed = 42
         self.r = None
         self.samp_per_id = 60
         self.human_flag = False
         self.wandb_enable = True
+        self.rearrange = False  # (when false is real training and when true it means train on all mice and test on unseen windows)
         # early stopping:
         self.patience = 5
         self.lr_ker_size = 5
@@ -123,7 +124,7 @@ class HRVDataset(Dataset):
         self.x = x.copy()
         self.y = y.copy()
         self.p = p
-        np.random.seed(p.seed)
+        # np.random.seed(p.seed)
         self.r = np.random.randint(0, 2, x.shape[0])
         self.mode = mode
 
@@ -144,7 +145,7 @@ class HRVDataset(Dataset):
         if self.mode:
             y = self.y[idx, 0]
             r = self.r[idx]  # 50%-50%
-            np.random.seed(self.p.seed)
+            # np.random.seed(self.p.seed)
             if r:  # find negative example
                 neg_list = np.argwhere(self.y[:, 0] != y)
                 idx = neg_list[np.random.randint(0, len(neg_list))].item()

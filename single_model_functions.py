@@ -656,49 +656,111 @@ def calc_metric(scores_list, y_list, epoch, p, train_mode='Training'):
     res_orig = 2 * scores - 1
     res_orig = res_orig.cpu().detach()
     y = y.cpu().detach()
-    thresh = torch.linspace(scores.min().item() - 1, scores.max().item() + 1, 100)
-    far = torch.zeros_like(thresh)  # fpr
-    frr = torch.zeros_like(thresh)  # 1 - tpr
-    acc = torch.zeros_like(thresh)
-    conf_mat_tensor = torch.zeros((thresh.shape[0], 2, 2))
-    for idx, trh in enumerate(thresh):
-        res2 = torch.clone(res_orig)
-        conf_mat = torch.zeros((2, 2))
-        res2[res_orig >= trh] = 1
-        res2[res_orig < trh] = 0
-        conf = (res2 == y)
-        conf_mat[0, 0] += torch.sum(1 * (conf[res2 == 0] == 1))
-        conf_mat[0, 1] += torch.sum(1 * (conf[res2 == 1] == 0))
-        conf_mat[1, 0] += torch.sum(1 * (conf[res2 == 0] == 0))
-        conf_mat[1, 1] += torch.sum(1 * (conf[res2 == 1] == 1))
-        far[idx] = conf_mat[0, 1] / conf_mat.sum(axis=1)[0]
-        frr[idx] = 1 - (conf_mat[1, 1] / conf_mat.sum(axis=1)[1])
-        acc[idx] = conf_mat.trace() / conf_mat.sum()
-        conf_mat_tensor[idx, :, :] = conf_mat
-    far[torch.isnan(far)] = 1
-    frr[torch.isnan(frr)] = 1
-    acc[torch.isnan(acc)] = 0
-    err_idx = np.argmin(np.abs(frr - far))
-    err = 0.5 * (frr[err_idx] + far[err_idx])
-    if p.wandb_enable:
-        # if train_mode == 'Training':
-        #     wandb.log({'training_thresh_err': thresh[err_idx]})
-        # else:
-        #     wandb.log({'testing_thresh_err': thresh[err_idx]})
-        pass
-    acc_idx = torch.argmax(acc)
-    best_acc = acc[acc_idx]
-    print('With threshold of {:.2f} we got minimal ERR of {:.2f} and accuracy of  {:.2f}'.format(thresh[err_idx], err,
-                                                                                                 acc[err_idx]))
-    print(conf_mat_tensor[err_idx])
-    print('With threshold of {:.2f} we got maximal accuracy of {:.2f} and ERR of  {:.2f}'.format(thresh[acc_idx],
-                                                                                                 best_acc, 0.5 * (frr[
-                                                                                                                      acc_idx] +
-                                                                                                                  far[
-                                                                                                                      acc_idx])))
-    best_th = thresh[acc_idx]
+    if train_mode == 'Training':
+        thresh = torch.linspace(scores.min().item() - 1, scores.max().item() + 1, 100)
+        far = torch.zeros_like(thresh)  # fpr
+        frr = torch.zeros_like(thresh)  # 1 - tpr
+        acc = torch.zeros_like(thresh)
+        F1 = torch.zeros_like(thresh)
+        conf_mat_tensor = torch.zeros((thresh.shape[0], 2, 2))
+        for idx, trh in enumerate(thresh):
+            res2 = torch.clone(res_orig)
+            conf_mat = torch.zeros((2, 2))
+            res2[res_orig >= trh] = 1
+            res2[res_orig < trh] = 0
+            conf = (res2 == y)
+            conf_mat[0, 0] += torch.sum(1 * (conf[res2 == 0] == 1))
+            conf_mat[0, 1] += torch.sum(1 * (conf[res2 == 1] == 0))
+            conf_mat[1, 0] += torch.sum(1 * (conf[res2 == 0] == 0))
+            conf_mat[1, 1] += torch.sum(1 * (conf[res2 == 1] == 1))
+            far[idx] = conf_mat[0, 1] / conf_mat.sum(axis=1)[0]
+            frr[idx] = 1 - (conf_mat[1, 1] / conf_mat.sum(axis=1)[1])
+            acc[idx] = conf_mat.trace() / conf_mat.sum()
+            PPV = conf_mat[1, 1]/(conf_mat.sum(axis=0)[1])
+            Se = conf_mat[1, 1]/(conf_mat.sum(axis=1)[1])
+            F1[idx] = 2*(PPV*Se)/(PPV+Se)
+            conf_mat_tensor[idx, :, :] = conf_mat
+        far[torch.isnan(far)] = 1
+        frr[torch.isnan(frr)] = 1
+        acc[torch.isnan(acc)] = 0
+        F1[torch.isnan(F1)] = 0
+        err_idx = np.argmin(np.abs(frr - far))
+        err = 0.5 * (frr[err_idx] + far[err_idx])
+        if p.wandb_enable:
+            # if train_mode == 'Training':
+            #     wandb.log({'training_thresh_err': thresh[err_idx]})
+            # else:
+            #     wandb.log({'testing_thresh_err': thresh[err_idx]})
+            pass
+        acc_idx = torch.argmax(acc)
+        best_acc = acc[acc_idx]
+        F1_idx = torch.argmax(F1)
+        best_F1 = F1[F1_idx]
+        with open(p.log_path + '/thresh.pkl', 'wb') as f:
+            pickle.dump([thresh[err_idx], thresh[acc_idx], thresh[F1_idx], err_idx, acc_idx, F1_idx], f)
+        print('With ERR threshold of {:.2f} we got maximal accuracy of {:.2f} and maximal F1 of {:.2f}'
+              .format(thresh[err_idx], acc[err_idx], F1[err_idx]))
+        print(conf_mat_tensor[err_idx])
+        print('With ACC threshold of {:.2f} we got maximal accuracy of {:.2f} and maximal F1 of {:.2f}'
+              .format(thresh[acc_idx], acc[acc_idx], F1[acc_idx]))
+        best_th = thresh[acc_idx]
+        print(conf_mat_tensor[acc_idx])
+        print('With F1 threshold of {:.2f} we got maximal accuracy of {:.2f} and maximal F1 of {:.2f}'
+              .format(thresh[F1_idx], acc[F1_idx], F1[F1_idx]))
+        print(conf_mat_tensor[F1_idx])
 
-    print(conf_mat_tensor[acc_idx])
+            # if epoch == p.num_epochs:
+
+    else:
+        with open(p.log_path + '/thresh.pkl', 'rb') as f:
+            th_err, th_acc, th_f1, err_idx, acc_idx, F1_idx = pickle.load(f)
+            conf_mat_tensor = torch.zeros((3, 2, 2))
+            stat_res = torch.zeros((3, 2))  # three rows for different types of thresh and two columns for the results (acc and F1)
+            th_list = [th_err, th_acc, th_f1]
+            for idx, trh in enumerate(th_list):
+                res2 = torch.clone(res_orig)
+                conf_mat = torch.zeros((2, 2))
+                res2[res_orig >= trh] = 1
+                res2[res_orig < trh] = 0
+                conf = (res2 == y)
+                conf_mat[0, 0] += torch.sum(1 * (conf[res2 == 0] == 1))
+                conf_mat[0, 1] += torch.sum(1 * (conf[res2 == 1] == 0))
+                conf_mat[1, 0] += torch.sum(1 * (conf[res2 == 0] == 0))
+                conf_mat[1, 1] += torch.sum(1 * (conf[res2 == 1] == 1))
+                far = conf_mat[0, 1] / conf_mat.sum(axis=1)[0]
+                frr = 1 - (conf_mat[1, 1] / conf_mat.sum(axis=1)[1])
+                acc = conf_mat.trace() / conf_mat.sum()
+                PPV = conf_mat[1, 1] / (conf_mat.sum(axis=0)[1])
+                Se = conf_mat[1, 1] / (conf_mat.sum(axis=1)[1])
+                F1 = 2 * (PPV * Se) / (PPV + Se)
+                conf_mat_tensor[idx, :, :] = conf_mat
+                far[torch.isnan(far)] = 1
+                frr[torch.isnan(frr)] = 1
+                acc[torch.isnan(acc)] = 0
+                F1[torch.isnan(F1)] = 0
+                stat_res[idx, 0] = acc
+                stat_res[idx, 1] = F1
+                err = 0.5*(far + frr)
+                best_acc = acc
+                if p.wandb_enable:
+                    # if train_mode == 'Training':
+                    #     wandb.log({'training_thresh_err': thresh[err_idx]})
+                    # else:
+                    #     wandb.log({'testing_thresh_err': thresh[err_idx]})
+                    pass
+
+        print('With ERR threshold of {:.2f} we got maximal accuracy of {:.2f} and maximal F1 of {:.2f}'
+              .format(th_err, stat_res[0, 0], stat_res[0, 1]))
+        print(conf_mat_tensor[0])
+        print('With ACC threshold of {:.2f} we got maximal accuracy of {:.2f} and maximal F1 of {:.2f}'
+              .format(th_acc, stat_res[1, 0], stat_res[1, 1]))
+        print(conf_mat_tensor[1])
+        print('With F1 threshold of {:.2f} we got maximal accuracy of {:.2f} and maximal F1 of {:.2f}'
+              .format(th_f1, stat_res[2, 0], stat_res[2, 1]))
+        print(conf_mat_tensor[2])
+        ii = torch.argmax(stat_res[:, 1])
+        best_th = th_list[ii]  # meaning gave the best F1 on test
+
 
     if epoch < 10:
         str_epoch = '0' + str(epoch)
@@ -707,38 +769,45 @@ def calc_metric(scores_list, y_list, epoch, p, train_mode='Training'):
     if train_mode == 'Training':
         name1 = 'conf_err_train_epoch_'
         name2 = 'conf_acc_train_epoch_'
+        if epoch == p.num_epochs:
+            torch.save(conf_mat_tensor[err_idx], p.log_path + '/' + name1 + str_epoch + '.pt')
+            torch.save(conf_mat_tensor[acc_idx], p.log_path + '/' + name2 + str_epoch + '.pt')
+            res2 = torch.clone(res_orig)
+            # paint orange res2[res2>= thresh[err_idx]] and blue res2[res < thresh[err_idx]], x_axis is res2 itself. add dashed
+            # line of optimal threshold. Do the same for accuracy, do it wuth subplot
+            sns.histplot(x=res2, hue=y, bins=50)  # , stat='probability', bins=int(np.ceil(0.4*len(y))))
+            plt.axvline(x=thresh[acc_idx], color='r', linestyle='dashed')
+            name1 = '/histo_train_epoch_'
+            name2 = '/err_acc_train_epoch_'
+            plt.xlabel('Cosine similarity [N.U]')
+            plt.title('{} mode: ACC = {:.2f}%, tr = {:.2f}'.format(train_mode, 100 * best_acc, thresh[acc_idx]))
+            plt.savefig(p.log_path + name1 + str_epoch + '.png')
+            plt.close()
+            # if np.mod(epoch, 10) == 0:
+            plt.plot(thresh, far, thresh, frr)  # , thresh, acc)
+            plt.legend(['FAR', 'FRR'])  # , 'ACC'])
+            # plt.title('{} mode: ERR = {:.2f}%, tr = {:.2f}, ACC = {:.2f}%, tr = {:.2f}'.format(train_mode, 100*err, thresh[err_idx], 100*best_acc, thresh[acc_idx]))
+            plt.xlabel('Cosine similarity [N.U]')
+            plt.ylabel('Error [N.U]')
+            plt.title('{} mode: ERR = {:.2f}%, tr = {:.2f}'.format(train_mode, 100 * err, thresh[err_idx]))
+            plt.savefig(p.log_path + name2 + str_epoch + '.png')
+            plt.close()
     else:
         name1 = 'conf_err_val_epoch_'
         name2 = 'conf_acc_val_epoch_'
-    if epoch == p.num_epochs:
-        torch.save(conf_mat_tensor[err_idx], p.log_path + '/' + name1 + str_epoch + '.pt')
-        torch.save(conf_mat_tensor[acc_idx], p.log_path + '/' + name2 + str_epoch + '.pt')
-        res2 = torch.clone(res_orig)
-        # paint orange res2[res2>= thresh[err_idx]] and blue res2[res < thresh[err_idx]], x_axis is res2 itself. add dashed
-        # line of optimal threshold. Do the same for accuracy, do it wuth subplot
-        sns.histplot(x=res2, hue=y, bins=50)  # , stat='probability', bins=int(np.ceil(0.4*len(y))))
-        plt.axvline(x=thresh[acc_idx], color='r', linestyle='dashed')
-        # plt.plot(thresh[err_idx] * np.ones(20), np.linspace(0, 0.1, 20), thresh[acc_idx] * np.ones(20), np.linspace(0, 0.1, 20))
-        if train_mode == 'Training':
-            name1 = '/histo_train_epoch_'
-            name2 = '/err_acc_train_epoch_'
-        else:
+        if epoch == p.num_epochs:
+            torch.save(conf_mat_tensor[0], p.log_path + '/' + name1 + str_epoch + '.pt')
+            torch.save(conf_mat_tensor[1], p.log_path + '/' + name2 + str_epoch + '.pt')
+            res2 = torch.clone(res_orig)
+            sns.histplot(x=res2, hue=y, bins=50)  # , stat='probability', bins=int(np.ceil(0.4*len(y))))
+            plt.axvline(x=th_acc, color='r', linestyle='dashed')
+            # plt.plot(thresh[err_idx] * np.ones(20), np.linspace(0, 0.1, 20), thresh[acc_idx] * np.ones(20), np.linspace(0, 0.1, 20))
             name1 = '/histo_val_epoch_'
             name2 = '/err_val_epoch_'
-        plt.xlabel('Cosine similarity [N.U]')
-        plt.title('{} mode: ACC = {:.2f}%, tr = {:.2f}'.format(train_mode, 100 * best_acc, thresh[acc_idx]))
-        plt.savefig(p.log_path + name1 + str_epoch + '.png')
-        plt.close()
-        # if np.mod(epoch, 10) == 0:
-        plt.plot(thresh, far, thresh, frr)  # , thresh, acc)
-        plt.legend(['FAR', 'FRR'])  # , 'ACC'])
-        # plt.title('{} mode: ERR = {:.2f}%, tr = {:.2f}, ACC = {:.2f}%, tr = {:.2f}'.format(train_mode, 100*err, thresh[err_idx], 100*best_acc, thresh[acc_idx]))
-        plt.xlabel('Cosine similarity [N.U]')
-        plt.ylabel('Error [N.U]')
-        plt.title('{} mode: ERR = {:.2f}%, tr = {:.2f}'.format(train_mode, 100 * err, thresh[err_idx]))
-        plt.savefig(p.log_path + name2 + str_epoch + '.png')
-        plt.close()
-        # plt.show()
+            plt.xlabel('Cosine similarity [N.U]')
+            plt.title('{} mode: ACC = {:.2f}%, tr = {:.2f}'.format(train_mode, 100 * best_acc, th_acc))
+            plt.savefig(p.log_path + name1 + str_epoch + '.png')
+            plt.close()
     return err, best_acc, best_th.to(scores.device), y.to(scores.device)
 
 
