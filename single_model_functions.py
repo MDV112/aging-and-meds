@@ -3,7 +3,7 @@ import os
 import pickle
 import time
 from datetime import datetime
-
+import pandas as pd
 import matplotlib.pyplot as plt
 import numpy as np
 import seaborn as sns
@@ -18,6 +18,7 @@ from deep_models import cosine_loss
 import wandb
 from torch.optim.lr_scheduler import LambdaLR
 import seaborn as sns
+from sklearn.model_selection import StratifiedKFold
 
 
 def choose_win(rr, lbls, samp_per_id=0):
@@ -49,6 +50,30 @@ def choose_win(rr, lbls, samp_per_id=0):
     else:
         return rr, lbls
 
+
+def load_datasets_auxiliary(x, y, p, mode, train_mode, x_a_orig, y_a_orig):
+
+    if train_mode:
+        p.n_train = x.shape[1]
+        dataset = HRVDataset(x.T, y, p, mode=mode)  # transpose should fit HRVDataset
+    else:
+        if p.bas_on_int:
+            rel_idx1 = int(np.floor(p.bootstrap[p.bootstrap_idx][0]*x_a_orig.shape[1]))
+            rel_idx2 = int(np.ceil(p.bootstrap[p.bootstrap_idx][1]*x_a_orig.shape[1]))
+            x_a = x_a_orig[:, rel_idx1:rel_idx2]
+            y_a = y_a_orig[rel_idx1:rel_idx2, :]
+            p.n_test = x_a.shape[1]
+            dataset = HRVDataset(x_a.T, y_a, p, mode=mode)  # transpose should fit HRVDataset
+        else:
+            rel_idx1 = int(np.floor(p.bootstrap[p.bootstrap_idx][0] * x.shape[1]))
+            rel_idx2 = int(np.ceil(p.bootstrap[p.bootstrap_idx][1] * x.shape[1]))
+            x_new = x[:, rel_idx1:rel_idx2]
+            y_new = y[rel_idx1:rel_idx2, :]
+            # x_new = x[:, p.bootstrap[p.bootstrap_idx][0]: p.bootstrap[p.bootstrap_idx][1]]
+            # y_new = y[p.bootstrap[p.bootstrap_idx][0]:p.bootstrap[p.bootstrap_idx][1], :]
+            p.n_test = x_new.shape[1]
+            dataset = HRVDataset(x_new.T, y_new, p, mode=mode)  # transpose should fit HRVDataset
+    return dataset
 
 def load_datasets(full_pickle_path: str, p: object, mode: int = 0, train_mode: bool = True, human_flag=0, samp_per_id=0) \
         -> object:
@@ -105,10 +130,23 @@ def load_datasets(full_pickle_path: str, p: object, mode: int = 0, train_mode: b
         x_c, x_a = x[:, y['med'] == 0], x[:, y['med'] == 1]
         y_c, y_a = y[['id', 'age']][y['med'] == 0].values.astype(int), y[['id', 'age']][y['med'] == 1].values.astype(
             int)
+
+
         x_c_T, y_c = shuffle(x_c.T, y_c, random_state=0)  # shuffle is used here for shuffeling ages
         # because in the dataloader it should be false. sklearn should make the shuffle the same. Notice the transpose
         # in x since we want to shuffle the columns fo RR
         x_a_T, y_a = shuffle(x_a.T, y_a, random_state=0)
+
+        if train_mode and p.learning_curve and not(p.rearrange):
+            N = x_c_T.shape[0]
+            step = int(np.floor(N/p.learning_curve_folds))
+            stop = (p.curr_fold + 1) * step - 1
+            if stop <= p.batch_size:
+                stop = p.batch_size + 1
+            x_c_T, x_a_T, y_c, y_a = x_c_T[0:stop, :], x_a_T[0:stop, :], y_c[0:stop, :], y_a[0:stop, :]
+            # print(x_c_T.shape[0])
+
+
         x_c = x_c_T.T
         x_a = x_a_T.T
         x_ca = np.concatenate((x_c, x_a), axis=1)
@@ -117,24 +155,51 @@ def load_datasets(full_pickle_path: str, p: object, mode: int = 0, train_mode: b
         x_ca = x_ca_T.T
 
         if p.med_mode == 'c':
-            if train_mode:
-                p.n_train = x_c.shape[1]
-            else:
-                p.n_test = x_c.shape[1]
-
-            dataset = HRVDataset(x_c.T, y_c, p, mode=mode)  # transpose should fit HRVDataset
+            dataset = load_datasets_auxiliary(x_c, y_c, p, mode, train_mode, x_a, y_a)
         elif p.med_mode == 'a':
-            if train_mode:
-                p.n_train = x_a.shape[1]
-            else:
-                p.n_test = x_a.shape[1]
-            dataset = HRVDataset(x_a.T, y_a, p, mode=mode)  # transpose should fit HRVDataset
+            dataset = load_datasets_auxiliary(x_a, y_a, p, mode, train_mode, x_a, y_a)
         elif p.med_mode == 'both':
-            if train_mode:
-                p.n_train = x_ca.shape[1]
-            else:
-                p.n_test = x_ca.shape[1]
-            dataset = HRVDataset(x_ca.T, y_ca, p, mode=mode)  # transpose should fit HRVDataset
+            dataset = load_datasets_auxiliary(x_ca, y_ca, p, mode, train_mode, x_a, y_a)
+
+
+        # if p.med_mode == 'c':
+        #     if train_mode:
+        #         p.n_train = x_c.shape[1]
+        #         dataset = HRVDataset(x_c.T, y_c, p, mode=mode)  # transpose should fit HRVDataset
+        #     else:
+        #         if p.bas_on_int:
+        #             # x_a = x_a[:, p.bootstrap[p.bootstrap_idx][0]:p.bootstrap[p.bootstrap_idx][1]]
+        #             p.n_test = x_a.shape[1]
+        #             dataset = HRVDataset(x_a.T, y_a, p, mode=mode)  # transpose should fit HRVDataset
+        #         else:
+        #             # x_c = x_c[:, p.bootstrap[p.bootstrap_idx][0]: p.bootstrap[p.bootstrap_idx][1]]
+        #             p.n_test = x_c.shape[1]
+        #             dataset = HRVDataset(x_c.T, y_c, p, mode=mode)  # transpose should fit HRVDataset
+        #
+        # elif p.med_mode == 'a':
+        #     if train_mode:
+        #         p.n_train = x_a.shape[1]
+        #         dataset = HRVDataset(x_a.T, y_a, p, mode=mode)  # transpose should fit HRVDataset
+        #     else:
+        #         if p.bas_on_int:
+        #             # x_a = x_a[:, p.bootstrap[p.bootstrap_idx][0]:p.bootstrap[p.bootstrap_idx][1]]
+        #             p.n_test = x_a.shape[1]
+        #             dataset = HRVDataset(x_a.T, y_a, p, mode=mode)  # transpose should fit HRVDataset
+        #         else:
+        #             # x_a = x_a[:, p.bootstrap[p.bootstrap_idx][0]:p.bootstrap[p.bootstrap_idx][1]]
+        #             p.n_test = x_a.shape[1]
+        #             dataset = HRVDataset(x_a.T, y_a, p, mode=mode)  # transpose should fit HRVDataset
+        # elif p.med_mode == 'both':
+        #     if train_mode:
+        #         p.n_train = x_ca.shape[1]
+        #         dataset = HRVDataset(x_ca.T, y_ca, p, mode=mode)  # transpose should fit HRVDataset
+        #     else:
+        #         if p.bas_on_int:
+        #             p.n_test = x_a.shape[1]
+        #             dataset = HRVDataset(x_a.T, y_a, p, mode=mode)  # transpose should fit HRVDataset
+        #         else:
+        #             p.n_test = x_ca.shape[1]
+        #             dataset = HRVDataset(x_ca.T, y_ca, p, mode=mode)  # transpose should fit HRVDataset
         else:  # other medications
             raise NotImplementedError
     else:  # Koopman HRV
@@ -186,8 +251,12 @@ def split_dataset(dataset: object, p: object, seed: int = 42) -> tuple:
         x_val = dataset.x[val_mask, :]
         y_val = dataset.y[val_mask, :]
     else:  # todo: check if split is done correctly here
-        x_train, x_val, y_train, y_val = train_test_split(dataset.x, dataset.y, test_size=p.val_size,
-                                                          random_state=42)  # random_state is to make sure both dataloaders will have the same split and thus we can preserve 50%-50% tagging using HRVDataset __getitem__
+        if p.stratify:
+            x_train, x_val, y_train, y_val = train_test_split(dataset.x, dataset.y, test_size=p.val_size,
+                                                              random_state=42, stratify=dataset.y)  # random_state is to make sure both dataloaders will have the same split and thus we can preserve 50%-50% tagging using HRVDataset __getitem__
+        else:
+            x_train, x_val, y_train, y_val = train_test_split(dataset.x, dataset.y, test_size=p.val_size,
+                                                              random_state=42)
     p.n_train = x_train.shape[0]
     p.n_val = x_val.shape[0]
     return x_train, y_train, x_val, y_val
@@ -240,14 +309,64 @@ def rearrange_dataset(p, *args, mode=0) -> tuple:
         test_data = args[1]
     mixed_x_data = np.vstack((train_data.x, test_data.x))
     mixed_y_data = np.vstack((train_data.y, test_data.y))
-    x_train, x_val, y_train, y_val = train_test_split(mixed_x_data, mixed_y_data, test_size=p.val_size,
-                                                      random_state=p.seed)  # random_state is to make sure both dataloaders will have the same split and thus we can preserve 50%-50% tagging using HRVDataset __getitem__
+    if p.med_mode == 'both':
+        a=1
+    if p.stratify:
+        x_train, x_val, y_train, y_val = train_test_split(mixed_x_data, mixed_y_data, test_size=p.val_size,
+                                                          random_state=p.seed, stratify=mixed_y_data[:, 0])  # random_state is to make sure both dataloaders will have the same split and thus we can preserve 50%-50% tagging using HRVDataset __getitem__
+    else:
+        x_train, x_val, y_train, y_val = train_test_split(mixed_x_data, mixed_y_data, test_size=p.val_size,
+                                                          random_state=p.seed)
+    if p.learning_curve:
+        N = x_train.shape[0]
+        step = int(np.floor(N / p.learning_curve_folds))
+        stop = (p.curr_fold + 1) * step - 1
+        if stop <= p.batch_size:
+            stop = p.batch_size + 1
+        x_train, y_train = x_train[0:stop, :], y_train[0:stop, :]
     p.n_train = x_train.shape[0]
     p.n_test = x_val.shape[0]
     p.r = np.random.randint(0, 2, p.n_train)
     train_dataset = HRVDataset(x_train, y_train, p, mode=mode)
     p.r = np.random.randint(0, 2, p.n_test)
     test_dataset = HRVDataset(x_val, y_val, p, mode=mode)
+    return train_dataset, test_dataset
+
+
+def rearrange_bas_on_int(p, *args, mode=0) -> tuple:
+    train_bas = args[0]
+    test_bas = args[1]
+    mixed_x_bas_data = np.vstack((train_bas.x, test_bas.x))
+    mixed_y_bas_data = np.vstack((train_bas.y, test_bas.y))
+    if p.stratify:
+        x_train, _, y_train, _ = train_test_split(mixed_x_bas_data, mixed_y_bas_data, test_size=p.val_size,
+                                                      random_state=p.seed, stratify=mixed_y_bas_data[:, 0])
+    else:
+        x_train, _, y_train, _ = train_test_split(mixed_x_bas_data, mixed_y_bas_data, test_size=p.val_size,
+                                                      random_state=p.seed)
+    p.n_train = x_train.shape[0]
+    p.r = np.random.randint(0, 2, p.n_train)
+    train_dataset = HRVDataset(x_train, y_train, p, mode=mode)
+
+    p.med_mode = 'a'
+    tr_dataset_int = load_datasets(p.train_path, p, human_flag=p.human_flag, samp_per_id=p.samp_per_id, mode=mode)
+    ts_dataset_int = load_datasets(p.test_path, p, human_flag=p.human_flag, samp_per_id=p.samp_per_id, train_mode=False,
+                                   mode=mode)
+    tr_dataset_int, ts_dataset_int = scale_dataset(p, tr_dataset_int, ts_dataset_int, should_scale=False, mode=mode)
+    train_int = tr_dataset_int
+    test_int = ts_dataset_int
+    mixed_x_int_data = np.vstack((train_int.x, test_int.x))
+    mixed_y_int_data = np.vstack((train_int.y, test_int.y))
+    if p.stratify:
+        _, x_val, _, y_val = train_test_split(mixed_x_int_data, mixed_y_int_data, test_size=p.val_size,
+                                                          random_state=p.seed, stratify=mixed_y_int_data[:, 0])
+    else:
+        _, x_val, _, y_val = train_test_split(mixed_x_int_data, mixed_y_int_data, test_size=p.val_size,
+                                                          random_state=p.seed)
+    p.n_test = x_val.shape[0]
+    p.r = np.random.randint(0, 2, p.n_test)
+    test_dataset = HRVDataset(x_val, y_val, p, mode=mode)
+    p.med_mode = 'c'
     return train_dataset, test_dataset
 
 
@@ -283,13 +402,34 @@ def train_epochs(model: object, p: object, *args):
     best_val_acc = 0
     best_ERR_diff = 1
     best_ACC_diff = 1
-    if p.mkdir:
-        pth = '/home/smorandv/ac8_and_aging_NEW/ac8_and_aging/logs/' + now.strftime("%b-%d-%Y_%H_%M_%S")
-        p.log_path = pth
-        os.mkdir(pth)
+    # if p.mkdir:
+        # pth = '/home/smorandv/ac8_and_aging_NEW/ac8_and_aging/logs/' + now.strftime("%b-%d-%Y_%H_%M_%S")
+    if p.rearrange:
+        pth = p.working_folder + 'trained_on_6m_rearrange_True'
+        if not (os.path.isdir(pth)):
+            os.mkdir(pth)
+    else:
+        pth = p.working_folder + 'trained_on_6m_rearrange_False'
+        if not (os.path.isdir(pth)):
+            os.mkdir(pth)
+    p.log_path = p.working_folder  # USED TO BE pth (pth = '/home/smorandv/ac8_and_aging_NEW/ac8_and_aging/logs/' + now.strftime("%b-%d-%Y_%H_%M_%S"))
+        # os.mkdir(pth)
     counter_train = 0
     counter_val = 0
     counter_lr = 0
+    if p.med_mode == 'a':
+        if not(os.path.isdir(pth + '/' + 'intrinsic')):
+            os.mkdir(pth + '/' + 'intrinsic')
+        pth = pth + '/' + 'intrinsic/'
+    elif p.med_mode == 'c':
+        if not(os.path.isdir(pth + '/' + 'basal')):
+            os.mkdir(pth + '/' + 'basal')
+        pth = pth + '/' + 'basal/'
+    elif p.med_mode == 'both':
+        if not(os.path.isdir(pth + '/' + 'combined')):
+            os.mkdir(pth + '/' + 'combined')
+        pth = pth + '/' + 'combined/'
+
     for epoch in range(1, p.num_epochs + 1):
         epoch_time = time.time()
         if p.calc_metric:
@@ -309,7 +449,7 @@ def train_epochs(model: object, p: object, *args):
                 else:
                     counter_train = 0
                 if counter_train > p.patience:
-                    p.error_txt = 'Stopped running since {} training epochs ERR in a row were 1.00'.format(
+                    p.error_txt = 'Stopped running since {} training epochs EER in a row were 1.00'.format(
                         counter_train)
                     print(p.error_txt)
                     break
@@ -321,25 +461,41 @@ def train_epochs(model: object, p: object, *args):
                 else:
                     counter_val = 0
                 if counter_val > p.patience:
-                    p.error_txt = 'Stopped running since {} validation epochs ERR in a row were 1.00'.format(
+                    p.error_txt = 'Stopped running since {} validation epochs EER in a row were 1.00'.format(
                         counter_val)
                     print(p.error_txt)
                     break
             ############## SAVING BEST MODELS ########################
-            if val_err_vector[epoch - 1] < best_val_ERR:
-                best_val_ERR = val_err_vector[epoch - 1]
-                torch.save(copy.deepcopy(model), pth + '/best_ERR_model.pt')
-            if val_acc_vector[epoch - 1] > best_val_acc:
-                best_val_acc = val_acc_vector[epoch - 1]
-                torch.save(copy.deepcopy(model), pth + '/best_ACC_model.pt')
-            if np.abs(val_err_vector[epoch - 1] - training_err_vector[epoch - 1]) < best_ERR_diff:
-                best_ERR_diff = np.abs(val_err_vector[epoch - 1] - training_err_vector[epoch - 1])
-                torch.save(copy.deepcopy(model), pth + '/best_ERR_diff_model.pt')
-            if np.abs(val_acc_vector[epoch - 1] - train_acc_vector[epoch - 1]) < best_ACC_diff:
-                best_ACC_diff = np.abs(val_acc_vector[epoch - 1] - train_acc_vector[epoch - 1])
-                torch.save(copy.deepcopy(model), pth + '/best_ACC_diff_model.pt')
-            if epoch == p.num_epochs:
-                torch.save(copy.deepcopy(model), pth + '/final_model.pt')
+            if p.learning_curve:
+                if val_err_vector[epoch - 1] < best_val_ERR:
+                    best_val_ERR = val_err_vector[epoch - 1]
+                    torch.save(copy.deepcopy(model), pth + 'best_ERR_model_' + str(p.curr_fold) + '.pt')
+                if val_acc_vector[epoch - 1] > best_val_acc:
+                    best_val_acc = val_acc_vector[epoch - 1]
+                    torch.save(copy.deepcopy(model), pth + 'best_ACC_model_' + str(p.curr_fold) + '.pt')
+                if np.abs(val_err_vector[epoch - 1] - training_err_vector[epoch - 1]) < best_ERR_diff:
+                    best_ERR_diff = np.abs(val_err_vector[epoch - 1] - training_err_vector[epoch - 1])
+                    torch.save(copy.deepcopy(model), pth + 'best_ERR_diff_model_' + str(p.curr_fold) + '.pt')
+                if np.abs(val_acc_vector[epoch - 1] - train_acc_vector[epoch - 1]) < best_ACC_diff:
+                    best_ACC_diff = np.abs(val_acc_vector[epoch - 1] - train_acc_vector[epoch - 1])
+                    torch.save(copy.deepcopy(model), pth + 'best_ACC_diff_model_' + str(p.curr_fold) + '.pt')
+                if epoch == p.num_epochs:
+                    torch.save(copy.deepcopy(model), pth + 'final_model_' + str(p.curr_fold) + '.pt')
+            else:
+                if val_err_vector[epoch - 1] < best_val_ERR:
+                    best_val_ERR = val_err_vector[epoch - 1]
+                    torch.save(copy.deepcopy(model), pth + 'best_ERR_model.pt')
+                if val_acc_vector[epoch - 1] > best_val_acc:
+                    best_val_acc = val_acc_vector[epoch - 1]
+                    torch.save(copy.deepcopy(model), pth + 'best_ACC_model.pt')
+                if np.abs(val_err_vector[epoch - 1] - training_err_vector[epoch - 1]) < best_ERR_diff:
+                    best_ERR_diff = np.abs(val_err_vector[epoch - 1] - training_err_vector[epoch - 1])
+                    torch.save(copy.deepcopy(model), pth + 'best_ERR_diff_model.pt')
+                if np.abs(val_acc_vector[epoch - 1] - train_acc_vector[epoch - 1]) < best_ACC_diff:
+                    best_ACC_diff = np.abs(val_acc_vector[epoch - 1] - train_acc_vector[epoch - 1])
+                    torch.save(copy.deepcopy(model), pth + 'best_ACC_diff_model.pt')
+                if epoch == p.num_epochs:
+                    torch.save(copy.deepcopy(model), pth + 'final_model.pt')
             # if val_err_vector[epoch - 1] < best_val_ERR:
             #     best_val_ERR = val_err_vector[epoch - 1]
             #     torch.save(copy.deepcopy(model.state_dict()), pth + '/best_ERR_model.pt')
@@ -491,6 +647,7 @@ def train_batches(model, p, epoch, *args) -> float:
     scores_list = []
     y_list = []
     # scheduler = ExponentialLR(optimizer, gamma=0.9)
+    n_count_one = 0
     for i, data in enumerate(tqdm(zip(dataloader1, dataloader2), total=len(dataloader1)), 0):
         # get the inputs
         inputs1, labels1 = data[0]
@@ -500,6 +657,8 @@ def train_batches(model, p, epoch, *args) -> float:
         labels1 = labels1.to(p.device)
         inputs2 = inputs2.to(p.device)
         labels2 = labels2.to(p.device)
+        n_count_one += torch.sum(torch.abs(torch.sum(inputs1 - inputs2,
+                                                     axis=2).squeeze()) < 1e-10).item()  # count how many compared pairs contained the same RR
         # forward
         if epoch > p.pretraining_epoch:
             # outputs1 = model(inputs1, flag_DSU=p.flag_DSU)  # forward pass
@@ -527,6 +686,7 @@ def train_batches(model, p, epoch, *args) -> float:
             outputs2 = model(inputs2)
             # backward + optimize
             loss = cosine_loss(outputs1, outputs2, labels1, labels2, flag=p.flag, lmbda=p.lmbda, b=p.b)
+        # loss is calculated as mean over a batch
         optimizer.zero_grad()
         loss.backward()  # retain_graph=False even though there are multioutput from forward because we define
         # loss= loss1 + loss2 +loss3. This way, we can free up space in cuda. We mght also want to detach the values
@@ -542,8 +702,12 @@ def train_batches(model, p, epoch, *args) -> float:
     if p.calc_metric:
         err, best_acc, conf, y = calc_metric(scores_list, y_list, epoch, p)
         # error_analysis(dataloader1, dataloader2, conf, y)
-        return running_loss, err, best_acc
-    return running_loss
+        print('In training, {:.1f}% of the pairs contain the same RR'.format(
+            100 * n_count_one / (dataloader1.batch_size * len(dataloader1))))
+        return running_loss/len(dataloader1), err, best_acc
+    print('In training, {:.1f}% of the pairs contain the same RR'.format(
+        100 * n_count_one / (dataloader1.batch_size * len(dataloader1))))
+    return running_loss/len(dataloader1)
 
 
 def eval_model(model, p, epoch, *args):
@@ -555,6 +719,7 @@ def eval_model(model, p, epoch, *args):
     :param: see train_model.
     :return:
     """
+    p.log_path = p.working_folder
     if len(args) == 3:  # no validation
         raise NotImplementedError
         return eval_loss
@@ -578,6 +743,7 @@ def eval_batches(model, p, epoch, *args) -> float:
     running_loss = 0.0
     scores_list = []
     y_list = []
+    n_count_one = 0
     with torch.no_grad():
         for i, data in enumerate(tqdm(zip(dataloader1, dataloader2), total=len(dataloader1)), 0):
             # get the inputs
@@ -588,6 +754,7 @@ def eval_batches(model, p, epoch, *args) -> float:
             labels1 = labels1.to(p.device)
             inputs2 = inputs2.to(p.device)
             labels2 = labels2.to(p.device)
+            n_count_one += torch.sum(torch.abs(torch.sum(inputs1 - inputs2, axis=2).squeeze()) < 1e-10).item()  # count how many compared pairs contained the same RR
             # print('inputs1:{},inputs2:{},labels1:{},labels2:{}'.format(inputs1.shape, inputs2.shape, labels1.shape, labels2.shape))
 
             if epoch > p.pretraining_epoch:
@@ -621,15 +788,18 @@ def eval_batches(model, p, epoch, *args) -> float:
             scores_list.append(0.5 * (res_temp + 1))  # making the cosine similarity as probability
             y_list.append(y_temp)
         if p.calc_metric:
-            err, best_acc, best_th, y = calc_metric(scores_list, y_list, epoch, p, train_mode='Testing')
+            err, best_acc, best_th, y = calc_metric(scores_list, y_list, epoch, p, train_mode='Testing',
+                                                    n_one_win=100*n_count_one/(dataloader1.batch_size*len(dataloader1)))
             if epoch == p.num_epochs:
                 # error_analysis(dataloader1, dataloader2, model, best_th, p)
                 pass
-            return running_loss, err, best_acc
-    return running_loss
+            print('In testing, {:.1f}% of the pairs contain the same RR'.format(100*n_count_one/(dataloader1.batch_size*len(dataloader1))))
+            return running_loss/len(dataloader1), err, best_acc
+    print('In testing, {:.1f}% of the pairs contain the same RR'.format(100*n_count_one/(dataloader1.batch_size*len(dataloader1))))
+    return running_loss/len(dataloader1)
 
 
-def calc_metric(scores_list, y_list, epoch, p, train_mode='Training'):
+def calc_metric(scores_list, y_list, epoch, p, train_mode='Training', n_one_win=None):
     """
     This function calculates metrics relevant to verification task such as FAR, FRR, ERR, confusion matrix etc.
     :param scores_list: list of tensors (mini-batches) that are probability-like.
@@ -638,8 +808,28 @@ def calc_metric(scores_list, y_list, epoch, p, train_mode='Training'):
     :param train_mode: Training/Testing for title.
     :return: ERR + plotting every 10 epochs and priniting confusion matrix every epoch.
     """
-    scores = torch.cat(scores_list)
+
+
+    if not scores_list:
+        y = 1
+        err = 1
+        best_acc = 0
+        if p.rearrange:
+            pth = p.working_folder + 'trained_on_6m_rearrange_True'
+        else:
+            pth = p.working_folder + 'trained_on_6m_rearrange_False'
+        if p.med_mode == 'a':
+            pth = pth + '/' + 'intrinsic/'
+        elif p.med_mode == 'c':
+            pth = pth + '/' + 'basal/'
+        elif p.med_mode == 'both':
+            pth = pth + '/' + 'combined/'
+        with open(pth + 'thresh.pkl', 'rb') as f:
+            th_err, _, _, err_idx, acc_idx, F1_idx = pickle.load(f)
+            best_th = th_err
+        return err, best_acc, best_th.to(p.device), y  #.to(p.device)
     y = torch.cat(y_list)
+    scores = torch.cat(scores_list)
     print(torch.sum(y) / len(y))
     # fpr, tpr, thresholds = metrics.roc_curve(y.detach().cpu(), scores.detach().cpu())
     # # https://stats.stackexchange.com/questions/272962/are-far-and-frr-the-same-as-fpr-and-fnr-respectively
@@ -696,7 +886,17 @@ def calc_metric(scores_list, y_list, epoch, p, train_mode='Training'):
         best_acc = acc[acc_idx]
         F1_idx = torch.argmax(F1)
         best_F1 = F1[F1_idx]
-        with open(p.log_path + '/thresh.pkl', 'wb') as f:
+        if p.rearrange:
+            pth = p.working_folder + 'trained_on_6m_rearrange_True'
+        else:
+            pth = p.working_folder + 'trained_on_6m_rearrange_False'
+        if p.med_mode == 'a':
+            pth = pth + '/' + 'intrinsic/'
+        elif p.med_mode == 'c':
+            pth = pth + '/' + 'basal/'
+        elif p.med_mode == 'both':
+            pth = pth + '/' + 'combined/'
+        with open(pth + 'thresh.pkl', 'wb') as f:
             pickle.dump([thresh[err_idx], thresh[acc_idx], thresh[F1_idx], err_idx, acc_idx, F1_idx], f)
         print('With ERR threshold of {:.2f} we got maximal accuracy of {:.2f} and maximal F1 of {:.2f}'
               .format(thresh[err_idx], acc[err_idx], F1[err_idx]))
@@ -712,10 +912,20 @@ def calc_metric(scores_list, y_list, epoch, p, train_mode='Training'):
             # if epoch == p.num_epochs:
 
     else:
-        with open(p.log_path + '/thresh.pkl', 'rb') as f:
+        if p.rearrange:
+            pth = p.working_folder + 'trained_on_6m_rearrange_True'
+        else:
+            pth = p.working_folder + 'trained_on_6m_rearrange_False'
+        if p.med_mode == 'a':
+            pth = pth + '/' + 'intrinsic/'
+        elif p.med_mode == 'c':
+            pth = pth + '/' + 'basal/'
+        elif p.med_mode == 'both':
+            pth = pth + '/' + 'combined/'
+        with open(pth + 'thresh.pkl', 'rb') as f:
             th_err, th_acc, th_f1, err_idx, acc_idx, F1_idx = pickle.load(f)
             conf_mat_tensor = torch.zeros((3, 2, 2))
-            stat_res = torch.zeros((3, 2))  # three rows for different types of thresh and two columns for the results (acc and F1)
+            stat_res = torch.zeros(3)  # three rows for different types of thresh and two columns for the results (acc and F1)
             th_list = [th_err, th_acc, th_f1]
             for idx, trh in enumerate(th_list):
                 res2 = torch.clone(res_orig)
@@ -738,9 +948,14 @@ def calc_metric(scores_list, y_list, epoch, p, train_mode='Training'):
                 frr[torch.isnan(frr)] = 1
                 acc[torch.isnan(acc)] = 0
                 F1[torch.isnan(F1)] = 0
-                stat_res[idx, 0] = acc
-                stat_res[idx, 1] = F1
-                err = 0.5*(far + frr)
+                err = 0.5 * (far + frr)
+                if idx == 0:
+                    stat_res[idx] = err
+                elif idx == 1:
+                    stat_res[idx] = acc
+                else:
+                    stat_res[idx] = F1
+
                 best_acc = acc
                 if p.wandb_enable:
                     # if train_mode == 'Training':
@@ -748,19 +963,91 @@ def calc_metric(scores_list, y_list, epoch, p, train_mode='Training'):
                     # else:
                     #     wandb.log({'testing_thresh_err': thresh[err_idx]})
                     pass
-
-        print('With ERR threshold of {:.2f} we got maximal accuracy of {:.2f} and maximal F1 of {:.2f}'
-              .format(th_err, stat_res[0, 0], stat_res[0, 1]))
+        # stat_res[0, 0]
+        # print('With ERR threshold of {:.2f} we got minimal ERR of {:.2f} and maximal F1 of {:.2f}'
+        #       .format(th_err, stat_res[0, 0], stat_res[0, 1]))
+        # print(conf_mat_tensor[0])
+        # print('With ACC threshold of {:.2f} we got maximal accuracy of {:.2f} and maximal F1 of {:.2f}'
+        #       .format(th_acc, stat_res[1, 0], stat_res[1, 1]))
+        # print(conf_mat_tensor[1])
+        # print('With F1 threshold of {:.2f} we got maximal accuracy of {:.2f} and maximal F1 of {:.2f}'
+        #       .format(th_f1, stat_res[2, 0], stat_res[2, 1]))
+        print('With ERR threshold of {:.2f} we got minimal ERR of {:.2f}'
+              .format(th_err, stat_res[0]))
         print(conf_mat_tensor[0])
-        print('With ACC threshold of {:.2f} we got maximal accuracy of {:.2f} and maximal F1 of {:.2f}'
-              .format(th_acc, stat_res[1, 0], stat_res[1, 1]))
+        print('With ACC threshold of {:.2f} we got maximal accuracy of {:.2f}'
+              .format(th_acc, stat_res[1]))
         print(conf_mat_tensor[1])
-        print('With F1 threshold of {:.2f} we got maximal accuracy of {:.2f} and maximal F1 of {:.2f}'
-              .format(th_f1, stat_res[2, 0], stat_res[2, 1]))
+        print('With F1 threshold of {:.2f} we got  maximal F1 of {:.2f}'
+              .format(th_f1, stat_res[2]))
         print(conf_mat_tensor[2])
-        ii = torch.argmax(stat_res[:, 1])
-        best_th = th_list[ii]  # meaning gave the best F1 on test
+        # ii = torch.argmax(stat_res[:, 1])
+        best_th = th_list[2]  # meaning gave the best F1 on test
+        d = {}
+        if p.run_saved_models:
+            if p.rearrange:
+                d['Rearrange'] = 'T'
+                # xl_pth = '/home/smorandv/ac8_and_aging_NEW/ac8_and_aging/rr_datasets/n_beats_' \
+                #          + str(p.n_beats) + '/inference/rearrange_True/res_tbl_nbeats_' \
+                #                             + str(p.n_beats)  + '_True.xlsx'
+            else:
+                d['Rearrange'] = 'F'
+            #     xl_pth = '/home/smorandv/ac8_and_aging_NEW/ac8_and_aging/rr_datasets/n_beats_' \
+            #              + str(p.n_beats) + '/inference/rearrange_False/res_tbl_nbeats_' \
+            #              + str(p.n_beats) + '_False.xlsx'
+            # xl_file = pd.read_excel(xl_pth)
+            if p.med_mode == 'a':
+                d['State'] = 'int'
+                # xl_file.loc[xl_file['State'] == 'int', p.age] = stat_res[:, 1].numpy()
+            elif p.med_mode == 'c':
+                d['State'] = 'basal'
+                # xl_file.loc[xl_file['State'] == 'basal', p.age] = stat_res[:, 1].numpy()
+            elif p.med_mode == 'both':
+                d['State'] = 'comb'
+                # xl_file.loc[xl_file['State'] == 'comb', p.age] = stat_res[:, 1].numpy()
+            # os.remove(xl_pth)
+            # xl_file.to_excel(xl_pth, columns=xl_file.columns)
+            if p.up2_21 and not p.bas_on_int:
+                'up2_21_bas_on_int'
+                mode = 'up2_21'
+                load_and_dump(mode, d, p, n_one_win, stat_res)
+            elif p.up2_21 and p.bas_on_int:
+                mode = 'up2_21_bas_on_int'
+                load_and_dump(mode, d, p, n_one_win, stat_res)
+            else:
+                if p.equal_non_equal == 'equal':
+                    if p.bas_on_int:
+                        mode = 'bas_on_int'
+                        load_and_dump(mode, d, p, n_one_win, stat_res)
+                        # with open('/home/smorandv/ac8_and_aging_NEW/ac8_and_aging/rr_datasets_equal/res_df_bas_on_int.pkl',
+                        #           'rb') as f:
+                        #     res_df = pickle.load(f)
+                        # res_df.loc[(res_df.loc[:, 'Rearrange'] == d['Rearrange']) & (res_df.loc[:, 'State'] == d['State'])
+                        #            & (res_df.loc[:, 'nbeats'] == p.n_beats), str(p.age)] = stat_res.numpy()
+                        # with open('/home/smorandv/ac8_and_aging_NEW/ac8_and_aging/rr_datasets_equal/res_df_bas_on_int.pkl',
+                        #           'wb') as f:
+                        #     pickle.dump(res_df, f)
 
+                    else:
+                        mode = 'equal'
+                        load_and_dump(mode, d, p, n_one_win, stat_res)
+                        # with open('/home/smorandv/ac8_and_aging_NEW/ac8_and_aging/rr_datasets_equal/res_df_equal.pkl', 'rb') as f:
+                        #      res_df = pickle.load(f)
+                        # res_df.loc[(res_df.loc[:, 'Rearrange'] == d['Rearrange']) & (res_df.loc[:, 'State'] == d['State'])
+                        #            & (res_df.loc[:, 'nbeats'] == p.n_beats), str(p.age)] = stat_res.numpy()
+                        # with open('/home/smorandv/ac8_and_aging_NEW/ac8_and_aging/rr_datasets_equal/res_df_equal.pkl', 'wb') as f:
+                        #      pickle.dump(res_df, f)
+                else:
+                    mode = 'non_equal'
+                    load_and_dump(mode, d, p, n_one_win, stat_res)
+                    # with open('/home/smorandv/ac8_and_aging_NEW/ac8_and_aging/rr_datasets/res_df.pkl',
+                    #           'rb') as f:
+                    #     res_df = pickle.load(f)
+                    # res_df.loc[(res_df.loc[:, 'Rearrange'] == d['Rearrange']) & (res_df.loc[:, 'State'] == d['State'])
+                    #            & (res_df.loc[:, 'nbeats'] == p.n_beats), str(p.age)] = stat_res.numpy()
+                    # with open('/home/smorandv/ac8_and_aging_NEW/ac8_and_aging/rr_datasets/res_df.pkl',
+                    #           'wb') as f:
+                    #     pickle.dump(res_df, f)
 
     if epoch < 10:
         str_epoch = '0' + str(epoch)
@@ -769,9 +1056,11 @@ def calc_metric(scores_list, y_list, epoch, p, train_mode='Training'):
     if train_mode == 'Training':
         name1 = 'conf_err_train_epoch_'
         name2 = 'conf_acc_train_epoch_'
+        name3 = 'conf_f1_train_epoch_'
         if epoch == p.num_epochs:
             torch.save(conf_mat_tensor[err_idx], p.log_path + '/' + name1 + str_epoch + '.pt')
             torch.save(conf_mat_tensor[acc_idx], p.log_path + '/' + name2 + str_epoch + '.pt')
+            torch.save(conf_mat_tensor[F1_idx], p.log_path + '/' + name3 + str_epoch + '.pt')
             res2 = torch.clone(res_orig)
             # paint orange res2[res2>= thresh[err_idx]] and blue res2[res < thresh[err_idx]], x_axis is res2 itself. add dashed
             # line of optimal threshold. Do the same for accuracy, do it wuth subplot
@@ -781,7 +1070,10 @@ def calc_metric(scores_list, y_list, epoch, p, train_mode='Training'):
             name2 = '/err_acc_train_epoch_'
             plt.xlabel('Cosine similarity [N.U]')
             plt.title('{} mode: ACC = {:.2f}%, tr = {:.2f}'.format(train_mode, 100 * best_acc, thresh[acc_idx]))
-            plt.savefig(p.log_path + name1 + str_epoch + '.png')
+            if p.rearrange:
+                plt.savefig(p.log_path + '/trained_on_6m_rearrange_True' + name1 + str_epoch + '.png')
+            else:
+                plt.savefig(p.log_path + '/trained_on_6m_rearrange_False' + name1 + str_epoch + '.png')
             plt.close()
             # if np.mod(epoch, 10) == 0:
             plt.plot(thresh, far, thresh, frr)  # , thresh, acc)
@@ -789,26 +1081,89 @@ def calc_metric(scores_list, y_list, epoch, p, train_mode='Training'):
             # plt.title('{} mode: ERR = {:.2f}%, tr = {:.2f}, ACC = {:.2f}%, tr = {:.2f}'.format(train_mode, 100*err, thresh[err_idx], 100*best_acc, thresh[acc_idx]))
             plt.xlabel('Cosine similarity [N.U]')
             plt.ylabel('Error [N.U]')
+            plt.xlim([-1, 1])
             plt.title('{} mode: ERR = {:.2f}%, tr = {:.2f}'.format(train_mode, 100 * err, thresh[err_idx]))
-            plt.savefig(p.log_path + name2 + str_epoch + '.png')
+            if p.rearrange:
+                plt.savefig(p.log_path + '/trained_on_6m_rearrange_True' + name2 + str_epoch + '.png')
+            else:
+                plt.savefig(p.log_path + '/trained_on_6m_rearrange_False' + name2 + str_epoch + '.png')
+            # plt.savefig(p.log_path + name2 + str_epoch + '.png')
             plt.close()
     else:
-        name1 = 'conf_err_val_epoch_'
-        name2 = 'conf_acc_val_epoch_'
-        if epoch == p.num_epochs:
-            torch.save(conf_mat_tensor[0], p.log_path + '/' + name1 + str_epoch + '.pt')
-            torch.save(conf_mat_tensor[1], p.log_path + '/' + name2 + str_epoch + '.pt')
+        if (epoch == p.num_epochs) or p.run_saved_models:
+            name1 = 'conf_err_val_epoch_'
+            name2 = 'conf_acc_val_epoch_'
+            name3 = 'conf_f1_val_epoch_'
+            if p.rearrange:
+                test_path = p.log_path + 'inference/' + 'rearrange_True/'
+                if not(os.path.isdir(test_path)):
+                    if not (os.path.isdir(p.log_path + 'inference/')):
+                        os.mkdir(p.log_path + 'inference/')
+                        os.mkdir(test_path)
+                    else:
+                        os.mkdir(test_path)
+            else:
+                test_path = p.log_path + 'inference/' + 'rearrange_False/'
+                if not(os.path.isdir(test_path)):
+                    if not (os.path.isdir(p.log_path + 'inference/')):
+                        os.mkdir(p.log_path + 'inference/')
+                        os.mkdir(test_path)
+                    else:
+                        os.mkdir(test_path)
+            if p.med_mode == 'a':
+                if not (os.path.isdir(test_path + '/' + 'intrinsic')):
+                    os.mkdir(test_path + '/' + 'intrinsic')
+                test_path = test_path + '/' + 'intrinsic/'
+            elif p.med_mode == 'c':
+                if not (os.path.isdir(test_path + '/' + 'basal')):
+                    os.mkdir(test_path + '/' + 'basal')
+                test_path = test_path + '/' + 'basal/'
+            elif p.med_mode == 'both':
+                if not (os.path.isdir(test_path + '/' + 'combined')):
+                    os.mkdir(test_path + '/' + 'combined')
+                test_path = test_path + '/' + 'combined/'
+            torch.save(conf_mat_tensor[0], test_path + str(p.age) + 'm_' + name1 + str_epoch + '.pt')
+            torch.save(conf_mat_tensor[1], test_path + str(p.age) + 'm_' + name2 + str_epoch + '.pt')
+            torch.save(conf_mat_tensor[2], test_path + str(p.age) + 'm_' + name3 + str_epoch + '.pt')
+
+
             res2 = torch.clone(res_orig)
-            sns.histplot(x=res2, hue=y, bins=50)  # , stat='probability', bins=int(np.ceil(0.4*len(y))))
-            plt.axvline(x=th_acc, color='r', linestyle='dashed')
-            # plt.plot(thresh[err_idx] * np.ones(20), np.linspace(0, 0.1, 20), thresh[acc_idx] * np.ones(20), np.linspace(0, 0.1, 20))
-            name1 = '/histo_val_epoch_'
-            name2 = '/err_val_epoch_'
-            plt.xlabel('Cosine similarity [N.U]')
-            plt.title('{} mode: ACC = {:.2f}%, tr = {:.2f}'.format(train_mode, 100 * best_acc, th_acc))
-            plt.savefig(p.log_path + name1 + str_epoch + '.png')
+            name1 = 'histo_val_epoch_'
+            fig = plt.subplots(figsize=(15, 15))
+            ax = sns.histplot(x=res2, hue=y, legend=False, kde=False, bins=50)
+            ax.set_xlabel(xlabel="Cosine similarity [N.U]", fontsize=24, weight='bold')
+            # ax.set_ylabel(ylabel='Estimated probability density')
+            ax.set_ylabel(ylabel="Count", fontsize=24, weight='bold')
+            ax.set_xticklabels([str("{:.1f}".format(i)) for i in ax.get_xticks()], fontsize=24, weight='bold')
+            ax.set_yticklabels([str("{:.1f}".format(i)) for i in ax.get_yticks()], fontsize=24, weight='bold')
+
+            # ax.set_yticklabels(ax.get_yticks(), fontsize=24, weight='bold')
+            for _, s in ax.spines.items():
+                s.set_linewidth(5)
+            plt.legend(['Positive GT', 'Negative GT'], fontsize=34)
+            plt.axvline(x=th_acc, color='r', linestyle='dashed', lw=6)
+            sns.despine(fig=None, ax=ax, top=True, right=True, left=False, bottom=False, offset=None, trim=False)
+            # plt.show()
+            if p.bas_on_int:
+                plt.savefig(test_path + str(p.age) + 'm_bas_on_int' + name1 + str_epoch + '.png')
+            else:
+                plt.savefig(test_path + str(p.age) + 'm_' + name1 + str_epoch + '.png')
             plt.close()
     return err, best_acc, best_th.to(scores.device), y.to(scores.device)
+
+
+def load_and_dump(mode, d, p, n_one_win, stat_res):
+    pkl_pth = '/home/smorandv/ac8_and_aging_NEW/ac8_and_aging/rr_datasets'
+    mode2fig = {'equal': '_equal/', 'non_equal': '/', 'bas_on_int': '_equal/bas_on_int/', 'up2_21': '_equal_up2_21/',
+                'up2_21_bas_on_int': '_equal_up2_21/bas_on_int/'}
+    pkl_pth += mode2fig[mode] + 'res_df_' + str(p.bootstrap_idx) + '.pkl'
+    with open(pkl_pth, 'rb') as f:
+        res_df = pickle.load(f)
+    res_df.loc[(res_df.loc[:, 'Rearrange'] == d['Rearrange']) & (res_df.loc[:, 'State'] == d['State'])
+               & (res_df.loc[:, 'nbeats'] == p.n_beats), ['n_one_beats_' + str(p.age), str(p.age)]] = \
+        np.hstack([np.tile(n_one_win, (3, 1)), np.expand_dims(stat_res.numpy(), axis=1)])
+    with open(pkl_pth, 'wb') as f:
+        pickle.dump(res_df, f)
 
 
 def error_analysis(dataloader1, dataloader2, model, best_th, p):
@@ -865,7 +1220,7 @@ def error_analysis(dataloader1, dataloader2, model, best_th, p):
     ax.set_xticklabels(["misrejected", "misaccepted", "corr_rejected", "corr_accepted"])
     ax.set_ylabel('Avg. HR difference [bpm]')
     plt.show()
-    plt.savefig(p.log_path + 'HR_diff.png', ax)
+    plt.savefig(p.log_path + '/inference/' + 'HR_diff.png', ax)
     plt.close()
     # plt.show()
     a=1

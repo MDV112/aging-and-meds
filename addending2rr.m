@@ -1,6 +1,6 @@
 function [] = addending2rr()
 %% This function takes the peaks of aging mice (Ismayil found in C:\Users\smorandv.STAFF\Documents\PhD\Aging Data\)
-% , converts them to rr, divdes them to windows and adds id, age and med as
+% takes the rr and adds id, age and med as
 % labels. It sends the results back to aging and meds
 %%
 close all
@@ -12,13 +12,16 @@ h = 1;
 for age = 6:3:30
     for med = 0:1
         if med == 0 % (control)
-            curr_data = ['C:\Users\smorandv.STAFF\Documents\PhD\Aging Data\C57 '...
+            curr_data = ['C:\Users\smorandv.BM\Documents\PhD\Aging Data\C57 '...
                     num2str(age) 'm mat\ecg_control\peaks_control'];
         else % (after trans)
-            curr_data = ['C:\Users\smorandv.STAFF\Documents\PhD\Aging Data\C57 '...
+            curr_data = ['C:\Users\smorandv.BM\Documents\PhD\Aging Data\C57 '...
                     num2str(age) 'm mat\ecg_after_trans\peaks_after_trans'];
         end
         cd(curr_data)
+        if not(isfolder([old_dir '\aging\']))
+            mkdir([old_dir '\aging\'])
+        end
         listing = dir;
         for i = 1:length(listing)
             curr_mouse = listing(i).name;
@@ -44,8 +47,8 @@ for age = 6:3:30
     end
 end
 %% AC8
-idx_A = strfind(curr_name,'AC8');
-idx_ = strfind(curr_name,'_');
-f = find(idx_>idx_A,1,'first');
-curr_tag = curr_name(idx_A+3:idx_(f)-1);
+% idx_A = strfind(curr_name,'AC8');
+% idx_ = strfind(curr_name,'_');
+% f = find(idx_>idx_A,1,'first');
+% curr_tag = curr_name(idx_A+3:idx_(f)-1);
 end

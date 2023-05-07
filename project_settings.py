@@ -4,6 +4,7 @@ from torch.utils.data import Dataset
 import argparse
 import random
 
+
 def init_parser(parent, add_help=False):
     """
     This function converts ProSet class to parser.
@@ -24,6 +25,8 @@ class ProSet:
         self.entity = "morandv_team"  # wandb init
         self.med_mode = 'both'  # control ('c'), abk ('a') or both ('both')
         self.log_path = '/home/smorandv/ac8_and_aging_NEW/ac8_and_aging/logs/'
+        self.n_beats = 250
+        self.age = 6
         self.mkdir = False
         self.n_train = None
         self.n_val = None
@@ -40,13 +43,28 @@ class ProSet:
         # self.test_path = '/home/smorandv/DynamicalSystems/DynamicalSystems/running_scripts/single_exp/no_exp_test.pkl'
         self.test_path = '/home/smorandv/ac8_and_aging_NEW/ac8_and_aging/rr_data.pkl'
         # splitting:
+        self.learning_curve_folds = 10
+        self.learning_curve = False
+        self.curr_fold = None
+        self.stratify = False
+        self.bootstrap_total_folds = 5
+        # self.indices_fraction = np.zeros(self.bootstrap_total_folds)
+        self.indices_fraction = (1 / self.bootstrap_total_folds) * np.arange(0, self.bootstrap_total_folds + 1)
+        self.bootstrap = [(0, 1)]
+        self.bootstrap += [(self.indices_fraction[i], self.indices_fraction[i + 1]) for i in range(self.bootstrap_total_folds)]
+        # self.bootstrap += [(self.indices_fraction[self.bootstrap_total_folds-1], 100000000000)]
+        self.bootstrap_idx = 0
         self.proper = True
         self.remove_mean = False
         self.mu = None
+        self.bas_on_int = False
+        self.equal_non_equal = 'equal'  # points out if the expected data should have the same number of windows for both basal and int
+        self.up2_21 = False
         self.test_mode = True
         self.val_size = 0.2
         self.seed = 42
         self.r = None
+        self.working_folder = None
         self.samp_per_id = 60
         self.human_flag = False
         self.wandb_enable = True
@@ -87,7 +105,7 @@ class ProSet:
         self.pool_ker_size = 2
         self.drop_out = 0.25  # 0.15
         self.num_hidden = [128, 64, 32]  # [128, 64, 32]
-        self.run_saved_models = True
+        self.run_saved_models = False
         # gpu:
         self.cpu = False
         self.mult_gpu = False
@@ -128,7 +146,6 @@ class HRVDataset(Dataset):
         self.r = np.random.randint(0, 2, x.shape[0])
         self.mode = mode
 
-
     def __len__(self):
         return self.x.shape[0]  # since we transpose
 
@@ -149,10 +166,10 @@ class HRVDataset(Dataset):
             if r:  # find negative example
                 neg_list = np.argwhere(self.y[:, 0] != y)
                 idx = neg_list[np.random.randint(0, len(neg_list))].item()
-            else:
+            else:  # find positive example
                 idx_temp = None
                 pos_list = np.argwhere(self.y[:, 0] == y)
-                if pos_list.shape[0] != 1:  # This is necessary since sometime there is only a single time window for a ,ouse and thus it would have to compare the time window to itself
+                if pos_list.shape[0] != 1:  # This is necessary since sometime there is only a single time window for a mouse and thus it would have to compare the time window to itself
                     while (idx_temp is None) or (idx_temp == idx):  # avoid comparing the same signals
                         idx_temp = pos_list[np.random.randint(0, len(pos_list))].item()
                         # print(pos_list)

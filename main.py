@@ -16,9 +16,35 @@ from deep_models import DeepModels
 import seaborn as sns
 from deep_models import ContrastiveLoss
 import pickle
+import os
 
+
+def create_datasets(n_beates, age):
+    # rel_path = '/home/smorandv/ac8_and_aging_NEW/ac8_and_aging/rr_datasets_equal/'
+    rel_path = '/home/smorandv/ac8_and_aging_NEW/ac8_and_aging/rr_datasets_equal_up2_21/'
+    data = Dataloader(input_type='raw', dataset_name=n_beates)
+    data.load()
+    data.split(specific_tags=True)
+    # label_dict = {'k_id': 'all', 'med': 'all', 'age': [age], 'win_num': 'equal', 'seed': 0}
+    label_dict = {'k_id': 'all', 'med': 'all', 'age': [age], 'win_num': 'equal', 'seed': 0}
+    data.clean()
+    data.choose_specific_xy(label_dict=label_dict)
+    curr_beats_path = rel_path + 'n_beats_' + str(n_beates)
+    if not(os.path.isdir(curr_beats_path)):
+        os.mkdir(curr_beats_path)
+    with open(curr_beats_path + '/' + 'rr_data_age_' + str(age) + '_nbeats_' + str(n_beates) + '.pkl', 'wb') as f:
+        pickle.dump(data, f)
 
 if __name__ == '__main__':
+    v1 = np.array([10, 25, 50, 75])
+    v2 = np.arange(100, 1050, 50)
+    nbeats_vec = np.hstack([v1, v2])
+    age_vec = np.arange(6, 33, 3)
+    for n_beates in nbeats_vec:
+        for age in age_vec:
+            create_datasets(int(n_beates), int(age))
+            print("n = {}, age is {}".format(n_beates, age))
+
     # with open('y_label.pkl', 'rb') as f:
     #     yy = pickle.load(f)
     # with open('x_y.pkl', 'rb') as f:
@@ -26,11 +52,11 @@ if __name__ == '__main__':
     red_dim = False  # apply dimensionality reduction
     vis = False
     device = torch.device("cuda:3" if torch.cuda.is_available() else "cpu")
-    data = Dataloader(input_type='raw', dataset_name=250)
+    data = Dataloader(input_type='raw', dataset_name=500)
     data.load()
     data.split()
     drop_indices = [0, 1, 4, 9, 10, 12, 13, 15, 17]
-    label_dict = {'k_id': 'all', 'med': 'all', 'age': [6], 'win_num': 'all', 'seed': 0}
+    label_dict = {'k_id': 'all', 'med': 'all', 'age': [6], 'win_num': 'equal', 'seed': 0}
     dim_red_dict = dict(perplexity=10.5, init='pca')
     n_components = 2
     n_nets = 1

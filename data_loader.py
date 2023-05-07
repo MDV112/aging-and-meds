@@ -50,6 +50,7 @@ class Dataloader:
             f = h5py.File(fname, "r")
             ds_keys = []
             f.visit(lambda key: ds_keys.append(key) if type(f[key]) is h5py._hl.dataset.Dataset else None)
+            #todo: change the following as in rr
             matching = [s for s in ds_keys if str(self.dataset_name[0]) in s and str(self.dataset_name[1]) in s]
             ds_input = f[matching[0]].value
             ds_output = f[matching[1]].value.astype(int)
@@ -83,9 +84,13 @@ class Dataloader:
             f = h5py.File(fname, "r")
             ds_keys = []
             f.visit(lambda key: ds_keys.append(key) if type(f[key]) is h5py._hl.dataset.Dataset else None)
-            matching = [s for s in ds_keys if str(self.dataset_name) in s]
-            self.ds_input = f[matching[0]][()]
-            ds_output = f[matching[1]][()].astype(int)
+            ttt = np.array([s.find('_' + str(self.dataset_name) + '_') for s in ds_keys])
+            rel_idx = np.argwhere(ttt != -1).flatten()
+            # matching = [s for s in ds_keys if str(self.dataset_name) in s]
+            # self.ds_input = f[matching[0]][()]
+            # ds_output = f[matching[1]][()].astype(int)
+            self.ds_input = f[ds_keys[rel_idx[0]]][()]
+            ds_output = f[ds_keys[rel_idx[1]]][()].astype(int)
             self.ds_output = pd.DataFrame(ds_output.T, columns=['id', 'age', 'med', 'win_num'])
             self.loaded = True
             #todo: check why dropping 726 in the age of 27 does not work in main
@@ -95,7 +100,7 @@ class Dataloader:
             # self.ds_output.drop(labels=lbls_drop, inplace=True)
             return self.ds_input, self.ds_output
 
-    def split(self, seed=42, test_size=0.2):
+    def split(self, seed=42, test_size=0.2, specific_tags=False):
         """
         This function splits the data into training and testing so the mice are different in both groups
         :param test_size: test size
@@ -123,6 +128,11 @@ class Dataloader:
             p = list(id)
             # train_mice = [i for j, i in enumerate(p) if j not in rand_idx]  # equivalent to the following
             train_mice = list(np.setdiff1d(np.array(p), test_mice))
+
+            if specific_tags:
+                train_mice = [553, 554, 555, 556, 559, 708, 714, 717, 726, 727, 729, 730, 733, 734, 739, 742, 751, 754,
+                              755, 756, 757, 759, 761, 764]
+                test_mice = [765, 748, 738, 741, 745, 740]
             if self.input_type == 'features':
                 self.X_train = self.ds_input[[x in train_mice for x in self.ds_output['id']]]
                 self.x_test = self.ds_input[[x in test_mice for x in self.ds_output['id']]]
@@ -277,6 +287,9 @@ class Dataloader:
             if label_dict['k_id'] == 'all':
                 self.x_train_specific = self.X_train
                 self.y_train_specific = self.Y_train
+            elif type(label_dict['k_id']) == list:
+                self.x_train_specific = self.X_train[:, [x in label_dict['k_id'] for x in self.Y_train['id']]]
+                self.y_train_specific = self.Y_train[[x in label_dict['k_id'] for x in self.Y_train['id']]]
             else:
                 id = np.random.choice(id, size=label_dict['k_id'], replace=False)
                 self.x_train_specific = self.X_train[:, [x in id for x in self.Y_train['id']]]
@@ -302,6 +315,17 @@ class Dataloader:
 
             if label_dict['win_num'] == 'all':
                 pass
+            elif label_dict['win_num'] == 'equal':
+                e_bas = self.y_train_specific.loc[self.y_train_specific.loc[:, 'med'] == 0, :]
+                max_num_win = int(e_bas.groupby(['id'])['win_num'].max().min())
+                self.x_train_specific = self.x_train_specific[:, [x in np.arange(1, max_num_win + 1) for x in
+                                                                  self.y_train_specific['win_num']]]
+                self.y_train_specific = self.y_train_specific[
+                    [x in np.arange(1, max_num_win + 1) for x in self.y_train_specific['win_num']]]
+                self.x_test_specific = self.x_test_specific[:, [x in np.arange(1, max_num_win + 1) for x in
+                                                                self.y_test_specific['win_num']]]
+                self.y_test_specific = self.y_test_specific[
+                    [x in np.arange(1, max_num_win + 1) for x in self.y_test_specific['win_num']]]
             else:
                 if isinstance(label_dict['win_num'], int):
                     self.x_train_specific = self.x_train_specific[:, [x in np.arange(1, label_dict['win_num'] + 1) for x in self.y_train_specific['win_num']]]
